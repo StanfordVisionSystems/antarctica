@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+
+import cv2
+import sys
+import numpy as np
+
+im = cv2.imread(sys.argv[1], 0)
+print(im.shape)
+ret, thres = cv2.threshold(im, 200, 255, 1)
+
+_, bound_box, _ = cv2.findContours(thres, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+print(cv2.minAreaRect(bound_box[0]))
+x,y,w,h = cv2.boundingRect(bound_box[0])
+print(x,y,w,h)
+roi = im[y:y+h,x:x+w]
+
+cv2.imwrite('out.jpg', roi)
+cv2.waitKey(0)
