@@ -40,21 +40,3 @@ for channel in channels:
 cv2.imshow("Text detection result", vis)
 cv2.waitKey(0)
     
-'''
-import sys
-import numpy as np
-import pyocr
-import pyocr.builders
-from PIL import Image
-
-tool = pyocr.get_available_tools()[0]
-print(tool.get_name())
-
-word_boxes = tool.image_to_string(
-        Image.open(sys.argv[1]),
-        lang="letsgodigital",
-        builder=pyocr.tesseract.DigitBuilder()
-    )
-
-print( word_boxes[:] )
-'''

@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+
+import sys
+import numpy as np
+import pyocr
+import pyocr.builders
+from PIL import Image
+
+tool = pyocr.get_available_tools()[0]
+print(tool.get_name())
+
+line_word_boxes = tool.image_to_string(
+        Image.open(sys.argv[1]),
+        lang="glacierdigits",
+        builder=pyocr.builders.WordBoxBuilder()
+    )
+
+for box in line_word_boxes:
+    print( box.content )
