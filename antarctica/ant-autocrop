@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+
+import cv2
+import sys
+import numpy as np
+import utils
+
+im = cv2.imread(sys.argv[1])
+roi = utils.autocrop(im)
+cv2.imwrite('out.jpg', roi)
+cv2.waitKey(0)

@@ -16,4 +16,5 @@ line_word_boxes = tool.image_to_string(
     )
 
 for box in line_word_boxes:
+    print( box.position )
     print( box.content )

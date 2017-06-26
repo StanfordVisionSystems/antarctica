@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+
+import cv2
+import utils
+import sys
+
+img = cv2.imread(sys.argv[1])
+utils.detect_sprocket_holes(img)
