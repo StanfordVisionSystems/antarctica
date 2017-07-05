@@ -49,14 +49,15 @@ class BasicOCRReader:
             segment = filmstrip[y1:y2, x1:x2].astype(np.uint8)
             segment = np.flip(np.transpose(segment), 1)
 
-            line_word_boxes = self.tool.image_to_string(
+            word_boxes = self.tool.image_to_string(
                 Image.fromarray(segment),
-                lang='glacierdigits',
-                builder=pyocr.builders.WordBoxBuilder()
+                lang='glacierdigits3',
+                builder=pyocr.builders.DigitLineBoxBuilder()
+                #builder=pyocr.builders.LineBoxBuilder()
             )
 
             # record and label film strip
-            for box in line_word_boxes:
+            for box in word_boxes:
                 (word_y2, _), (word_y1, _) = box.position
 
                 word_y1 = length - word_y1
@@ -68,7 +69,7 @@ class BasicOCRReader:
                 text = '???'
                 if not box.content.isspace():
                     text = box.content
-                print(text)
+                #print(text)
                     
                 filmstrip = cv2.putText(filmstrip, text, (x1, y1+word_y2+50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
                 
