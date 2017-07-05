@@ -40,8 +40,10 @@ class BasicFilmstripStitcher:
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
-            print('Warning: horizontal alignment off by ', match_x - x1)
-
+            print('Warning: horizontal alignment off by', match_x - x1)
+            print('Warning: using default offset values (120, 110)')
+            max_loc = (120, 110)
+            
         # return the alignment so that stitching can be performed
         alignment = {
             'first_bottom_margin' : h1 - y2,
@@ -53,6 +55,10 @@ class BasicFilmstripStitcher:
         return alignment
 
     def _stitch(self, first, second, alignment):
+        '''
+        Stitch together two images using their alignment. Average the overlap region.
+        '''
+
         h1, w1 = first.shape
         h2, w2 = second.shape
         assert(w1 == w2)
@@ -91,6 +97,7 @@ class BasicFilmstripStitcher:
         
         print('Finsihed alignment')
 
+        # print out statistics on the alignment
         #for alignment in alignments:
         #    print(alignment['first_bottom_margin'])
         #    print(alignment['second_top_margin'])
@@ -104,4 +111,5 @@ class BasicFilmstripStitcher:
             stitched_image = self._stitch(stitched_image, image, alignment)
                     
         print('Finished stitching images')
-        cv2.imwrite('/home/ubuntu/test.png', stitched_image)
+        #cv2.imwrite('/home/ubuntu/test.png', stitched_image)
+        return stitched_image
