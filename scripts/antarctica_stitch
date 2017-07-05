@@ -4,8 +4,11 @@ import argparse
 import antarctica as a
 
 def main(args):
-    stitcher = a.BasicFilmstripStitcher(args.filmstrips)
-    stitcher.stitch()
+    stitcher = a.BasicFilmstripStitcher()
+    full_filstrip = stitcher.stitch(args.filmstrips)
+
+    ocr = a.BasicOCRReader()
+    text = ocr.find_text(full_filstrip)
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
