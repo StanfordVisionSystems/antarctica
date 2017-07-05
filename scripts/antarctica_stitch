@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+
+import argparse
+import antarctica as a
+
+def main(args):
+    stitcher = a.BasicFilmstripStitcher(args.filmstrips)
+    stitcher.stitch()
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('filmstrips', metavar='filmstrip', type=str, nargs='+',
+                        help='the image files to stitch together (in order)')
+
+    args = parser.parse_args()
+    main(args)
