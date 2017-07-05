@@ -1,16 +1,85 @@
 import cv2
-import functools
+import pyocr
+import pyocr.builders
 import numpy as np
+import scipy.ndimage
 
+from matplotlib import pyplot as plt
+from PIL import Image
+
+class BasicOCRReader:
+    def __init__(self):
+        self.tool = pyocr.get_available_tools()[0]
+        print('Using', self.tool.get_name())
+
+    def find_text(self, filmstrip):
+        h, w = filmstrip.shape
+
+        p = 0.01
+        x11 = int(0.10*w - p*w)
+        x12 = int(0.13*w + p*w)
+        x21 = int(0.78*w - p*w)
+        x22 = int(0.81*w + p*w)
+        
+        self._find_text(filmstrip, (x11,x12))
+        self._find_text(filmstrip, (x21,x22))
+        
+    def _find_text(self, filmstrip, roi):
+        h, w = filmstrip.shape
+        x1, x2 = roi
+           
+        # perform text detection
+        edges = cv2.Canny(filmstrip[:, x1:x2].astype(np.uint8), 100, 200)
+        
+        edges = np.amax(edges, axis=1)
+        edges = scipy.ndimage.filters.median_filter(edges, 50) 
+        edges = scipy.ndimage.filters.maximum_filter1d(edges, 100) 
+        edges[0] = 0
+        edges[h-1] = 0
+
+        edge_locs = np.nonzero(edges[:-1] - edges[1:])[0]
+        assert( len(edge_locs) % 2 == 0)
+
+        for i in range(0, len(edge_locs), 2):
+            y1 = edge_locs[i]
+            y2 = edge_locs[i+1]
+            length = y2 - y1
+            
+            # perform recognition
+            segment = filmstrip[y1:y2, x1:x2].astype(np.uint8)
+            segment = np.flip(np.transpose(segment), 1)
+
+            line_word_boxes = self.tool.image_to_string(
+                Image.fromarray(segment),
+                lang='glacierdigits',
+                builder=pyocr.builders.WordBoxBuilder()
+            )
+
+            # record and label film strip
+            for box in line_word_boxes:
+                (word_y2, _), (word_y1, _) = box.position
+
+                word_y1 = length - word_y1
+                word_y2 = length - word_y2
+                word_length = word_y2 - word_y1
+                
+                filmstrip = cv2.rectangle(filmstrip, (x1, y1+word_y1), (x2, y1+word_y2), (0,0,0))
+
+                text = '???'
+                if not box.content.isspace():
+                    text = box.content
+                print(text)
+                    
+                filmstrip = cv2.putText(filmstrip, text, (x1, y1+word_y2+50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
+                
+        cv2.imwrite('/home/ubuntu/test.png', filmstrip)
+        
+    def visualize(self):
+        pass
+    
 class BasicFilmstripStitcher:
-    def __init__(self, image_filenames):
+    def __init__(self):
         self.images = []
-        for image_filename in image_filenames:
-            image = cv2.imread(image_filename, cv2.IMREAD_UNCHANGED)
-            image = cv2.convertScaleAbs(image, alpha=(255.0/65535.0))
-            self.images.append(image)
-
-        print('Loaded images')
             
     def _align(self, first, second):
         '''
@@ -88,7 +157,15 @@ class BasicFilmstripStitcher:
 
         return img
 
-    def stitch(self):
+    def stitch(self, image_filenames):
+
+        for image_filename in image_filenames:
+            image = cv2.imread(image_filename, cv2.IMREAD_UNCHANGED)
+            image = cv2.convertScaleAbs(image, alpha=(255.0/65535.0))
+            self.images.append(image)
+
+        print('Loaded images')
+
         alignments = []
         for i in range(len(self.images)-1):
             first = self.images[i]
