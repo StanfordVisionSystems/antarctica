@@ -10,6 +10,10 @@ from PIL import Image
 class BasicOCRReader:
     def __init__(self):
         self.tool = pyocr.get_available_tools()[0]
+        
+        self.template0 = np.asarray(cv2.imread('/home/ubuntu/antarctica/data/0.png', cv2.IMREAD_GRAYSCALE), dtype=np.uint8)
+        self.template8 = np.asarray(cv2.imread('/home/ubuntu/antarctica/data/8.png', cv2.IMREAD_GRAYSCALE), dtype=np.uint8)
+        
         print('Using', self.tool.get_name())
 
     def find_text(self, filmstrip):
@@ -24,8 +28,22 @@ class BasicOCRReader:
         self._find_text(filmstrip, (x11,x12))
         self._find_text(filmstrip, (x21,x22))
 
-    def _zero_or_eight(self, char):
-        return '0/8'
+    def _zero_or_eight(self, char, guess):
+
+        if( char.shape[0] < self.template0.shape[0] or char.shape[1] < self.template0.shape[1] ):
+            print('Warning: template is too large. Using guess.')
+            return guess
+        
+        res = cv2.matchTemplate(char, self.template0, cv2.TM_CCOEFF)
+        _, max0, _, _ = cv2.minMaxLoc(res)
+
+        res = cv2.matchTemplate(char, self.template8, cv2.TM_CCOEFF)
+        _, max8, _, _ = cv2.minMaxLoc(res)
+
+        if(max8 > max0):
+            return '8'
+        else:
+            return '0'
         
     def _find_text(self, filmstrip, roi):
         h, w = filmstrip.shape
@@ -67,7 +85,7 @@ class BasicOCRReader:
             
             # record and label film strip
             for box in char_boxes:
-                (char_y2, _), (char_y1, _) = box.position
+                (char_y2, char_x2), (char_y1, char_x1) = box.position
 
                 char_y1 = length - char_y1
                 char_y2 = length - char_y2
@@ -78,7 +96,10 @@ class BasicOCRReader:
                     continue
 
                 if box.content == '0' or box.content == '8':
-                    box.content = self._zero_or_eight(box.content)
+                    #print(char_y2, char_x2, char_y1, char_x1)
+                    #cv2.imshow('char', segment[char_x2:char_x1, (length-char_y2):(length-char_y1)])
+                    #cv2.waitKey(0)
+                    box.content = self._zero_or_eight(segment[char_x2:char_x1, (length-char_y2):(length-char_y1)].astype(np.uint8), box.content)
                     
                 filmstrip = cv2.rectangle(filmstrip, (x1, y1+char_y1), (x2, y1+char_y2), (0,0,0))
 
