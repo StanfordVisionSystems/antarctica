@@ -23,6 +23,9 @@ class BasicOCRReader:
         
         self._find_text(filmstrip, (x11,x12))
         self._find_text(filmstrip, (x21,x22))
+
+    def _zero_or_eight(self, char):
+        return '0/8'
         
     def _find_text(self, filmstrip, roi):
         h, w = filmstrip.shape
@@ -49,35 +52,45 @@ class BasicOCRReader:
             segment = filmstrip[y1:y2, x1:x2].astype(np.uint8)
             segment = np.flip(np.transpose(segment), 1)
 
-            word_boxes = self.tool.image_to_string(
+            segment = cv2.fastNlMeansDenoising(segment)
+            #_, segment = cv2.threshold(segment, 100, 255, cv2.THRESH_BINARY_INV)
+            #cv2.imshow('img', segment)
+            #cv2.waitKey(0)
+            
+            char_boxes = self.tool.image_to_string(
                 Image.fromarray(segment),
-                lang='glacierdigits3',
-                builder=pyocr.builders.DigitLineBoxBuilder()
-                #builder=pyocr.builders.LineBoxBuilder()
+                lang='glacierdigits3', #'glacierdigits3',
+                builder=pyocr.tesseract.CharBoxBuilder()
             )
 
+            #print(char_boxes)
+            
             # record and label film strip
-            for box in word_boxes:
-                (word_y2, _), (word_y1, _) = box.position
+            for box in char_boxes:
+                (char_y2, _), (char_y1, _) = box.position
 
-                word_y1 = length - word_y1
-                word_y2 = length - word_y2
-                word_length = word_y2 - word_y1
-                
-                filmstrip = cv2.rectangle(filmstrip, (x1, y1+word_y1), (x2, y1+word_y2), (0,0,0))
+                char_y1 = length - char_y1
+                char_y2 = length - char_y2
+                char_length = char_y2 - char_y1
+                                
+                if(char_length < 10 or char_length > 50):
+                    print('invalid char')
+                    continue
 
-                text = '???'
+                if box.content == '0' or box.content == '8':
+                    box.content = self._zero_or_eight(box.content)
+                    
+                filmstrip = cv2.rectangle(filmstrip, (x1, y1+char_y1), (x2, y1+char_y2), (0,0,0))
+
+                text = '?'
                 if not box.content.isspace():
                     text = box.content
                 #print(text)
                     
-                filmstrip = cv2.putText(filmstrip, text, (x1, y1+word_y2+50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
+                filmstrip = cv2.putText(filmstrip, text, (x1, y1+char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
                 
         cv2.imwrite('/home/ubuntu/test.png', filmstrip)
         
-    def visualize(self):
-        pass
-    
 class BasicFilmstripStitcher:
     def __init__(self):
         self.images = []
