@@ -1,9 +1,12 @@
 import cv2
+import pickle
 import pyocr
 import pyocr.builders
 import numpy as np
 import scipy.ndimage
 
+from skimage.feature import hog
+from sklearn.svm import LinearSVC
 from matplotlib import pyplot as plt
 from PIL import Image
 
@@ -13,6 +16,10 @@ class BasicOCRReader:
         
         self.template0 = np.asarray(cv2.imread('/home/ubuntu/antarctica/data/0.png', cv2.IMREAD_GRAYSCALE), dtype=np.uint8)
         self.template8 = np.asarray(cv2.imread('/home/ubuntu/antarctica/data/8.png', cv2.IMREAD_GRAYSCALE), dtype=np.uint8)
+
+        self.TARGET_SIZE = 50
+        with open('/home/ubuntu/antarctica/ocr/model.pkl', 'rb') as f:
+            self.OCR_model = pickle.loads(f.read())
         
         print('Using', self.tool.get_name())
 
@@ -28,23 +35,17 @@ class BasicOCRReader:
         self._find_text(filmstrip, (x11,x12))
         self._find_text(filmstrip, (x21,x22))
 
-    def _zero_or_eight(self, char, guess):
+    def _hog_OCR(self, char):
+        char = cv2.resize(char,
+                          (self.TARGET_SIZE, self.TARGET_SIZE),
+                          cv2.INTER_CUBIC)
 
-        if( char.shape[0] < self.template0.shape[0] or char.shape[1] < self.template0.shape[1] ):
-            print('Warning: template is too large. Using guess.')
-            return guess
+        features = hog(char)
+        prediction = self.OCR_model.predict(features)
+        prediction = str(prediction[0])
         
-        res = cv2.matchTemplate(char, self.template0, cv2.TM_CCOEFF)
-        _, max0, _, _ = cv2.minMaxLoc(res)
+        return prediction
 
-        res = cv2.matchTemplate(char, self.template8, cv2.TM_CCOEFF)
-        _, max8, _, _ = cv2.minMaxLoc(res)
-
-        if(max8 > max0):
-            return '8'
-        else:
-            return '0'
-        
     def _find_text(self, filmstrip, roi):
         h, w = filmstrip.shape
         x1, x2 = roi
@@ -71,18 +72,13 @@ class BasicOCRReader:
             segment = np.flip(np.transpose(segment), 1)
 
             segment = cv2.fastNlMeansDenoising(segment)
-            #_, segment = cv2.threshold(segment, 100, 255, cv2.THRESH_BINARY_INV)
-            #cv2.imshow('img', segment)
-            #cv2.waitKey(0)
             
             char_boxes = self.tool.image_to_string(
                 Image.fromarray(segment),
-                lang='glacierdigits3', #'glacierdigits3',
+                lang='glacierdigits3',
                 builder=pyocr.tesseract.CharBoxBuilder()
             )
 
-            #print(char_boxes)
-            
             # record and label film strip
             for box in char_boxes:
                 (char_y2, char_x2), (char_y1, char_x1) = box.position
@@ -91,16 +87,18 @@ class BasicOCRReader:
                 char_y2 = length - char_y2
                 char_length = char_y2 - char_y1
                                 
-                if(char_length < 10 or char_length > 50):
-                    print('invalid char')
+                if(char_length < 5 or char_length > 50):
+                    print('invalid char dims; skipping')
                     continue
 
-                if box.content == '0' or box.content == '8':
-                    #print(char_y2, char_x2, char_y1, char_x1)
-                    #cv2.imshow('char', segment[char_x2:char_x1, (length-char_y2):(length-char_y1)])
-                    #cv2.waitKey(0)
-                    box.content = self._zero_or_eight(segment[char_x2:char_x1, (length-char_y2):(length-char_y1)].astype(np.uint8), box.content)
-                    
+                hog_recognition = self._hog_OCR(segment[char_x2:char_x1, (length-char_y2):(length-char_y1)].astype(np.uint8))
+                if(box.content != hog_recognition):
+                    print('mismatch between tesseract and hog', box.content, hog_recognition)
+
+                    # only trust hog when trying to distinguish 0 and 8
+                    if(box.content == '0' or box.content == '8'):
+                        box.content = hog_recognition
+                
                 filmstrip = cv2.rectangle(filmstrip, (x1, y1+char_y1), (x2, y1+char_y2), (0,0,0))
 
                 text = '?'
