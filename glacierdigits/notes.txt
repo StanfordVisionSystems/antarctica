@@ -1,1 +1,0 @@
-followed tutorial here: https://www.joyofdata.de/blog/a-guide-on-ocr-with-tesseract-3-03/

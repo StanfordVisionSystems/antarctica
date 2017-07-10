@@ -40,7 +40,7 @@ class BasicOCRReader:
                           (self.TARGET_SIZE, self.TARGET_SIZE),
                           cv2.INTER_CUBIC)
 
-        features = hog(char)
+        features = hog(char).reshape(1,-1)
         prediction = self.OCR_model.predict(features)
         prediction = str(prediction[0])
         
@@ -87,7 +87,7 @@ class BasicOCRReader:
                 char_y2 = length - char_y2
                 char_length = char_y2 - char_y1
                                 
-                if(char_length < 5 or char_length > 50):
+                if(char_length < 10 or char_length > 50):
                     print('invalid char dims; skipping')
                     continue
 
@@ -95,8 +95,12 @@ class BasicOCRReader:
                 if(box.content != hog_recognition):
                     print('mismatch between tesseract and hog', box.content, hog_recognition)
 
-                    # only trust hog when trying to distinguish 0 and 8
-                    if(box.content == '0' or box.content == '8'):
+                    if(box.content in ['0', '8'] and
+                       hog_recognition in ['0', '8']):
+                        box.content = hog_recognition
+
+                    if(box.content in ['1', '7'] and
+                       hog_recognition in ['1', '7']):
                         box.content = hog_recognition
                 
                 filmstrip = cv2.rectangle(filmstrip, (x1, y1+char_y1), (x2, y1+char_y2), (0,0,0))
