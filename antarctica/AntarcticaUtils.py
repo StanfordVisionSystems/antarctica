@@ -11,7 +11,9 @@ from matplotlib import pyplot as plt
 from PIL import Image
 
 class BasicOCRReader:
-    def __init__(self):
+    def __init__(self, logger):
+        self.logger = logger
+
         self.tool = pyocr.get_available_tools()[0]
         
         self.TARGET_SIZE = 50
@@ -86,12 +88,12 @@ class BasicOCRReader:
                 char_length = char_y2 - char_y1
                                 
                 if(char_length < 10 or char_length > 50):
-                    print('invalid char dims; skipping')
+                    self.logger.debug('invalid char dims; skipping')
                     continue
 
                 hog_recognition = self._hog_OCR(segment[char_x2:char_x1, (length-char_y2):(length-char_y1)].astype(np.uint8))
                 if(box.content != hog_recognition):
-                    print('mismatch between tesseract and hog', box.content, hog_recognition)
+                    self.logger.debug('mismatch between tesseract and hog', box.content, hog_recognition)
 
                     if(box.content in ['0', '8'] and
                        hog_recognition in ['0', '8']):
@@ -106,7 +108,6 @@ class BasicOCRReader:
                 text = '?'
                 if not box.content.isspace():
                     text = box.content
-                #print(text)
                     
                 filmstrip = cv2.putText(filmstrip, text, (x1, y1+char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
 
@@ -114,7 +115,8 @@ class BasicOCRReader:
         #cv2.imwrite('/home/ubuntu/test.png', filmstrip)
         
 class BasicFilmstripStitcher:
-    def __init__(self):
+    def __init__(self, logger):
+        self.logger = logger
         self.images = []
             
     def _align(self, first, second):
@@ -145,8 +147,7 @@ class BasicFilmstripStitcher:
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
-            print('Warning: horizontal alignment off by', match_x - x1)
-            print('Warning: using default offset values (120, 110)')
+            self.logger.debug('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
             max_loc = (120, 110)
             
         # return the alignment so that stitching can be performed
@@ -193,14 +194,13 @@ class BasicFilmstripStitcher:
 
         return img
 
-    def stitch(self, image_filenames):
+    def stitch(self, images):
 
-        for image_filename in image_filenames:
-            image = cv2.imread(image_filename, cv2.IMREAD_UNCHANGED)
+        for image in images:
             image = cv2.convertScaleAbs(image, alpha=(255.0/65535.0))
             self.images.append(image)
 
-        print('Loaded images')
+        self.logger.info('Loaded images')
 
         alignments = []
         for i in range(len(self.images)-1):
@@ -208,7 +208,7 @@ class BasicFilmstripStitcher:
             second = self.images[i+1]
             alignments.append( self._align(first, second) )
         
-        print('Finsihed alignment')
+        self.logger.info('Finsihed alignment')
 
         stitched_image = self.images[0]
         for i in range(1, len(self.images)):
@@ -217,6 +217,6 @@ class BasicFilmstripStitcher:
             
             stitched_image = self._stitch(stitched_image, image, alignment)
                     
-        print('Finished stitching images')
+        self.logger.info('Finished stitching images')
         #cv2.imwrite('/home/ubuntu/test.png', stitched_image)
         return stitched_image
