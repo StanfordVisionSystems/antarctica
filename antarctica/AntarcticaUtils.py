@@ -18,7 +18,8 @@ class BasicOCRReader:
         with open('/home/ubuntu/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
             self.OCR_model = pickle.loads(f.read())
         
-        print('Using', self.tool.get_name())
+    def get_ocr_tool_name(self):
+        return self.tool.get_name()
 
     def find_text(self, filmstrip):
         h, w = filmstrip.shape

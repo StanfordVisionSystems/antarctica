@@ -5,6 +5,8 @@ import itertools
 import os
 import sys
 
+import time
+
 import numpy as np
 import pathos.multiprocessing as mp
 
@@ -13,36 +15,55 @@ import AntarcticaUtils as a
 # number of frames to stitch together
 BATCH_SIZE = 25
 
-# number of batches to process before persisting result to the output file
-CHECKPOINT_INTERVAL = 10 
-
 class image_processer:
     def __init__(self):
         self.stitcther = a.BasicFilmstripStitcher()
+
         self.ocr_reader = a.BasicOCRReader()
         
     def __call__(self, a):
-        return 'o'
+        
+        # try to stitch the frame together (bail off if there is trouble)
+
+        # rotate the film to the correct orientation (bail out is nec.)
+
+        # perform OCR (bail out if recognition is poor)
+
+        # dump output to tif and annotated jpeg file
+
+        # report the csv-formated line(s) that should be logged
+        
+        return []
         
 def main(args):
     print('Using', args.num_workers, 'worker(s)')
     pool = mp.Pool(args.num_workers)
 
-    print('Checking', args.output_csv)
-    if(os.path.isfile(args.output_csv)):
-        raise(FileExistsError(args.output_csv + ' already exists.'))
+    print('Checking if', args.output_csv, 'exists')
+    with open(args.output_csv, 'x') as f:
+        print('Writing CSV header')
+        f.write('header1, header2, ...')
 
-    macro_batch_size = CHECKPOINT_INTERVAL * args.num_workers 
-    macro_batches = [args.images[i:i+macro_batch_size]
-                     for i in xrange(0, len(args.images), macro_batch_size)]
-    
-    CSVrows = itertools.chain.from_iterable(
-        pool.map(image_processer(), args.images) )
+    print('Preparing macro batches for processing')    
+    if(args.flush_interval is None):
+        macro_batches = [ args.images ]
+    else:
+        macro_batch_size = args.flush_interval * args.num_workers 
+        macro_batches = [ args.images[i:i+macro_batch_size]
+                          for i in range(0, len(args.images), macro_batch_size) ]
 
-    print('Writing output to', args.output_csv)
-    with open(args.output_csv, 'w') as f:
-        f.write( '\n'.join(CSVrows) )
+    print('Begin processing batches')
+    for macro_batch in macro_batches:
+        CSVrows = itertools.chain.from_iterable(
+            pool.map(image_processer(), args.images) )
+        
+        with open(args.output_csv, 'a') as f:
+            f.write( '\n'.join(CSVrows) )
 
+    print('Finished processing batches')
+
+    print('Done!')
+        
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=
     'Perform OCR on radiometric data from Antarctic glaciers.')
@@ -53,6 +74,13 @@ if __name__ == '__main__':
                         type=int,
                         help='num worker processes to use (default: num cores on machine)',
                         default=os.cpu_count())
+
+    parser.add_argument('-c',
+                        dest='flush_interval',
+                        metavar='flush_interval',
+                        type=int,
+                        help='# batches to process before flushing results to output.csv (default: no intermediate flushing)',
+                        default=None)
 
     parser.add_argument('-f',
                         dest='output_csv',
