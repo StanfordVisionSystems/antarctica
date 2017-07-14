@@ -14,11 +14,8 @@ class BasicOCRReader:
     def __init__(self):
         self.tool = pyocr.get_available_tools()[0]
         
-        self.template0 = np.asarray(cv2.imread('/home/ubuntu/antarctica/data/0.png', cv2.IMREAD_GRAYSCALE), dtype=np.uint8)
-        self.template8 = np.asarray(cv2.imread('/home/ubuntu/antarctica/data/8.png', cv2.IMREAD_GRAYSCALE), dtype=np.uint8)
-
         self.TARGET_SIZE = 50
-        with open('/home/ubuntu/antarctica/ocr/model.pkl', 'rb') as f:
+        with open('/home/ubuntu/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
             self.OCR_model = pickle.loads(f.read())
         
         print('Using', self.tool.get_name())
@@ -26,7 +23,7 @@ class BasicOCRReader:
     def find_text(self, filmstrip):
         h, w = filmstrip.shape
 
-        p = 0.01
+        p = 0.1
         x11 = int(0.10*w - p*w)
         x12 = int(0.13*w + p*w)
         x21 = int(0.78*w - p*w)
@@ -111,8 +108,9 @@ class BasicOCRReader:
                 #print(text)
                     
                 filmstrip = cv2.putText(filmstrip, text, (x1, y1+char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
-                
-        cv2.imwrite('/home/ubuntu/test.png', filmstrip)
+
+        return filmstrip
+        #cv2.imwrite('/home/ubuntu/test.png', filmstrip)
         
 class BasicFilmstripStitcher:
     def __init__(self):
@@ -211,12 +209,6 @@ class BasicFilmstripStitcher:
         
         print('Finsihed alignment')
 
-        # print out statistics on the alignment
-        #for alignment in alignments:
-        #    print(alignment['first_bottom_margin'])
-        #    print(alignment['second_top_margin'])
-        #    print(alignment['xoffset'])
-            
         stitched_image = self.images[0]
         for i in range(1, len(self.images)):
             image = self.images[i]

@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+
+import argparse
+import itertools
+import os
+import sys
+
+import numpy as np
+import pathos.multiprocessing as mp
+
+import AntarcticaUtils as a
+
+# number of frames to stitch together
+BATCH_SIZE = 25
+
+# number of batches to process before persisting result to the output file
+CHECKPOINT_INTERVAL = 10 
+
+class image_processer:
+    def __init__(self):
+        self.stitcther = a.BasicFilmstripStitcher()
+        self.ocr_reader = a.BasicOCRReader()
+        
+    def __call__(self, a):
+        return 'o'
+        
+def main(args):
+    print('Using', args.num_workers, 'worker(s)')
+    pool = mp.Pool(args.num_workers)
+
+    print('Checking', args.output_csv)
+    if(os.path.isfile(args.output_csv)):
+        raise(FileExistsError(args.output_csv + ' already exists.'))
+
+    macro_batch_size = CHECKPOINT_INTERVAL * args.num_workers 
+    macro_batches = [args.images[i:i+macro_batch_size]
+                     for i in xrange(0, len(args.images), macro_batch_size)]
+    
+    CSVrows = itertools.chain.from_iterable(
+        pool.map(image_processer(), args.images) )
+
+    print('Writing output to', args.output_csv)
+    with open(args.output_csv, 'w') as f:
+        f.write( '\n'.join(CSVrows) )
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=
+    'Perform OCR on radiometric data from Antarctic glaciers.')
+
+    parser.add_argument('-p',
+                        dest='num_workers',
+                        metavar='num_workers',
+                        type=int,
+                        help='num worker processes to use (default: num cores on machine)',
+                        default=os.cpu_count())
+
+    parser.add_argument('-f',
+                        dest='output_csv',
+                        metavar='output.csv',
+                        type=str,
+                        required=True,
+                        help='redirect the program output to a file (give filename)')
+
+    parser.add_argument(dest='images',
+                        metavar='image',
+                        type=str,
+                        nargs='+',
+                        help='images to process (NOTE: processed in the order they appear)')
+
+    args = parser.parse_args()
+    main(args)
