@@ -34,11 +34,9 @@ class BasicOCRReader:
         y21 = int(0.795*h - p*h)
         y22 = int(0.795*h + p*h)
 
-        
-        
         # god only knows knows why we need the copy...
-        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
-        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
+        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
+        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
         
         return filmstrip
     
@@ -140,12 +138,8 @@ class BasicOCRReader:
         
 class BasicFilmstripStitcher:
 
-
-    def __init__(self, logger):
-        # self.logger = logger
-        self.images = []
-            
-    def _align(self, first, second):
+    @staticmethod
+    def _align(first, second, logger):
         '''
         Use template matching to align/stitch together two images. A patch from the
         bottom of the first image will be matched to the top of the second image.
@@ -173,8 +167,11 @@ class BasicFilmstripStitcher:
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
-            # self.logger.debug('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
-            max_loc = (120, 110)
+            if logger:
+                self.logger.error('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
+
+            return None
+            #max_loc = (120, 110) # TODO(jremmons) default offset
             
         # return the alignment so that stitching can be performed
         alignment = {
@@ -186,7 +183,8 @@ class BasicFilmstripStitcher:
 
         return alignment
 
-    def _stitch(self, first, second, alignment):
+    @staticmethod
+    def _stitch(first, second, alignment, logger):
         '''
         Stitch together two images using their alignment. Average the overlap region.
         '''
@@ -220,27 +218,37 @@ class BasicFilmstripStitcher:
 
         return img
 
-    def stitch(self, uint16_images):
+    @staticmethod
+    def stitch(uint16_images, logger=None):
 
         converted_images = []
         for uint16_image in uint16_images:
+            assert(uint16_image.dtype == np.uint16)
             float_image = cv2.convertScaleAbs(uint16_image, alpha=(255.0/65535.0))
             converted_images.append(float_image)
+
+        if logger:
+            logger.debug('Finsihed image conversion to float')
 
         alignments = []
         for i in range(len(converted_images)-1):
             first = converted_images[i]
             second = converted_images[i+1]
-            alignments.append( self._align(first, second) )
+            alignments.append( BasicFilmstripStitcher._align(first, second, logger) )
         
-        # self.logger.info('Finsihed alignment')
+        if logger:
+            logger.debug('Finsihed alignment')
 
         stitched_image = uint16_images[0]
         for i in range(1, len(uint16_images)):
-            image = uint16_images[i]
+            uint16_image = uint16_images[i]
             alignment = alignments[i-1]
+            print(alignment)
+
+            stitched_image = BasicFilmstripStitcher._stitch(stitched_image, uint16_image, alignment, logger)
+        cv2.imwrite('/home/ubuntu/test.small.png', stitched_image)
             
-            stitched_image = self._stitch(stitched_image, uint16_image, alignment)
-                    
-        # self.logger.info('Finished stitching images')
+        if logger:
+            logger.debug('Finished stitching images')
+
         return np.flip(np.transpose(stitched_image), 1)
