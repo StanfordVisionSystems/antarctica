@@ -26,8 +26,6 @@ class image_processer:
     COULD_NOT_FIND_TEXT = 4
     
     def __init__(self):
-
-        self.film_stitcther = a.BasicFilmstripStitcher(logger)
         self.ocr_reader = a.BasicOCRReader(logger)
         
     def get_filename_num(self, filename):
@@ -70,7 +68,7 @@ class image_processer:
         logger.debug('Loaded images')
                 
         # try to stitch the frames together        
-        stitched_image = self.film_stitcther.stitch(image_data['rasters'])
+        stitched_image = a.BasicFilmstripStitcher.stitch(image_data['rasters'], logger)
         if stitched_image is None:
             logger.warning('Could not stitch film strips together. Skipping batch!')
             return self.noop(image_data, image_processer.COULD_NOT_STITCH_FILM)
@@ -78,13 +76,13 @@ class image_processer:
 
         # rotate the film to the correct orientation
         oriented_image = self.ocr_reader.orient(stitched_image)
-        cv2.imwrite('/home/ubuntu/test.png', oriented_image)
-        cv2.waitKey()
         if oriented_image is None:
             logger.warning('Could not determine the correct orientation of the film. Skipping batch!')
             return self.noop(image_data, image_processer.COULD_NOT_ORIENT_FILM)
         logger.debug('Finished orienting image')
 
+        cv2.imwrite('/home/ubuntu/test.tif', oriented_image)
+        return ''
 
         # perform OCR
         text_detections = 1
@@ -107,7 +105,7 @@ class image_processer:
 def main(args):
 
     logger.info('Using {} worker(s)'.format(args.num_workers))
-    #pool = mp.Pool(args.num_workers)
+    #pool = mp.Pool(args.num_workers) #TODO(jremmons) make the code parallel
 
     logger.debug('Checking if {} exists'.format(args.output_dir))
     try:
@@ -175,7 +173,7 @@ if __name__ == '__main__':
                         metavar='flush_interval',
                         type=int,
                         help='number of batches to process before flushing results to output.csv (default: flush every batch)',
-                        default=1)
+                        default=None)# TODO(jremmons) make flushing default
 
     parser.add_argument('-o',
                         dest='output_dir',

@@ -34,6 +34,8 @@ class BasicOCRReader:
         y21 = int(0.795*h - p*h)
         y22 = int(0.795*h + p*h)
 
+        # perform some kind of heuristic to determine the correct orientation
+
         # god only knows knows why we need the copy...
         filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
         filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
@@ -235,7 +237,7 @@ class BasicFilmstripStitcher:
             first = converted_images[i]
             second = converted_images[i+1]
             alignments.append( BasicFilmstripStitcher._align(first, second, logger) )
-        
+            
         if logger:
             logger.debug('Finsihed alignment')
 
@@ -243,10 +245,8 @@ class BasicFilmstripStitcher:
         for i in range(1, len(uint16_images)):
             uint16_image = uint16_images[i]
             alignment = alignments[i-1]
-            print(alignment)
 
             stitched_image = BasicFilmstripStitcher._stitch(stitched_image, uint16_image, alignment, logger)
-        cv2.imwrite('/home/ubuntu/test.small.png', stitched_image)
             
         if logger:
             logger.debug('Finished stitching images')
