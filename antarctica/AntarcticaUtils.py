@@ -12,7 +12,7 @@ from PIL import Image
 
 class BasicOCRReader:
     def __init__(self, logger):
-        self.logger = logger
+        # self.logger = logger
 
         self.tool = pyocr.get_available_tools()[0]
         
@@ -21,9 +21,29 @@ class BasicOCRReader:
             self.OCR_model = pickle.loads(f.read())
         
     def get_ocr_tool_name(self):
+
         return self.tool.get_name()
 
+    def orient(self, filmstrip):
+
+        h, w = filmstrip.shape
+
+        p = 0.05
+        y11 = int(0.115*h - p*h)
+        y12 = int(0.115*h + p*h)
+        y21 = int(0.795*h - p*h)
+        y22 = int(0.795*h + p*h)
+
+        
+        
+        # god only knows knows why we need the copy...
+        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
+        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
+        
+        return filmstrip
+    
     def find_text(self, filmstrip):
+
         h, w = filmstrip.shape
 
         p = 0.1
@@ -35,7 +55,10 @@ class BasicOCRReader:
         self._find_text(filmstrip, (x11,x12))
         self._find_text(filmstrip, (x21,x22))
 
+        return None
+        
     def _hog_OCR(self, char):
+
         char = cv2.resize(char,
                           (self.TARGET_SIZE, self.TARGET_SIZE),
                           cv2.INTER_CUBIC)
@@ -47,6 +70,7 @@ class BasicOCRReader:
         return prediction
 
     def _find_text(self, filmstrip, roi):
+
         h, w = filmstrip.shape
         x1, x2 = roi
            
@@ -88,12 +112,12 @@ class BasicOCRReader:
                 char_length = char_y2 - char_y1
                                 
                 if(char_length < 10 or char_length > 50):
-                    self.logger.debug('invalid char dims; skipping')
+                    # self.logger.debug('invalid char dims; skipping')
                     continue
 
                 hog_recognition = self._hog_OCR(segment[char_x2:char_x1, (length-char_y2):(length-char_y1)].astype(np.uint8))
                 if(box.content != hog_recognition):
-                    self.logger.debug('mismatch between tesseract and hog', box.content, hog_recognition)
+                    # self.logger.debug('mismatch between tesseract and hog', box.content, hog_recognition)
 
                     if(box.content in ['0', '8'] and
                        hog_recognition in ['0', '8']):
@@ -115,8 +139,10 @@ class BasicOCRReader:
         #cv2.imwrite('/home/ubuntu/test.png', filmstrip)
         
 class BasicFilmstripStitcher:
+
+
     def __init__(self, logger):
-        self.logger = logger
+        # self.logger = logger
         self.images = []
             
     def _align(self, first, second):
@@ -147,7 +173,7 @@ class BasicFilmstripStitcher:
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
-            self.logger.debug('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
+            # self.logger.debug('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
             max_loc = (120, 110)
             
         # return the alignment so that stitching can be performed
@@ -172,7 +198,7 @@ class BasicFilmstripStitcher:
         # assume no offset for now
         height = h1-alignment['first_bottom_margin'] + h2-alignment['second_top_margin'] - alignment['overlap']
         width = w1
-        img = np.zeros( (height, width) )
+        img = np.zeros((height, width), dtype=np.uint16)
 
         # copy in top section
         img[:h1-alignment['first_bottom_margin']-alignment['overlap'], :] = \
@@ -184,9 +210,9 @@ class BasicFilmstripStitcher:
 
         img[overlap1:overlap2, :] = \
             (
-             (first[overlap1:overlap2, :].astype(np.uint16) +
-             second[alignment['second_top_margin']:alignment['second_top_margin']+alignment['overlap'],:].astype(np.uint16)) / 2
-            ).astype(np.uint8)
+             (first[overlap1:overlap2, :].astype(np.uint32) +
+             second[alignment['second_top_margin']:alignment['second_top_margin']+alignment['overlap'],:].astype(np.uint32)) / 2
+            ).astype(np.uint16)
         
         # copy in bottom section
         img[h1-alignment['first_bottom_margin']:, :] = \
@@ -194,29 +220,27 @@ class BasicFilmstripStitcher:
 
         return img
 
-    def stitch(self, images):
+    def stitch(self, uint16_images):
 
-        for image in images:
-            image = cv2.convertScaleAbs(image, alpha=(255.0/65535.0))
-            self.images.append(image)
-
-        self.logger.info('Loaded images')
+        converted_images = []
+        for uint16_image in uint16_images:
+            float_image = cv2.convertScaleAbs(uint16_image, alpha=(255.0/65535.0))
+            converted_images.append(float_image)
 
         alignments = []
-        for i in range(len(self.images)-1):
-            first = self.images[i]
-            second = self.images[i+1]
+        for i in range(len(converted_images)-1):
+            first = converted_images[i]
+            second = converted_images[i+1]
             alignments.append( self._align(first, second) )
         
-        self.logger.info('Finsihed alignment')
+        # self.logger.info('Finsihed alignment')
 
-        stitched_image = self.images[0]
-        for i in range(1, len(self.images)):
-            image = self.images[i]
+        stitched_image = uint16_images[0]
+        for i in range(1, len(uint16_images)):
+            image = uint16_images[i]
             alignment = alignments[i-1]
             
-            stitched_image = self._stitch(stitched_image, image, alignment)
+            stitched_image = self._stitch(stitched_image, uint16_image, alignment)
                     
-        self.logger.info('Finished stitching images')
-        #cv2.imwrite('/home/ubuntu/test.png', stitched_image)
-        return stitched_image
+        # self.logger.info('Finished stitching images')
+        return np.flip(np.transpose(stitched_image), 1)
