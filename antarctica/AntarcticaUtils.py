@@ -218,8 +218,14 @@ class BasicOCRReader:
         print(top_errors)
         print(bottom_errors)
         
-        #TODO(jremmons) do something with this information
-        
+        #TODO(jremmons) do something with this information...
+
+        #TODO(jremmons) check that the date is constant (allow for 1 or 2 error)
+        #TODO(jremmons) check that the time is incrementing in roughly the same interval each time
+        #TODO(jremmons) check that the settings remain constant
+        #TODO(jremmons) check that the flight number is constant
+        #TODO(jremmons) check that the cbd is incrementing by the same interval each time
+
         return None, None
             
     def _hog_OCR(self, char, logger):
