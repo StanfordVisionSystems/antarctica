@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 
 
 import argparse
 import cv2
@@ -26,7 +26,7 @@ class image_processer:
     COULD_NOT_FIND_TEXT = 4
     
     def __init__(self):
-        self.ocr_reader = a.BasicOCRReader(logger)
+        self.ocr_reader = a.BasicOCRReader()
         
     def get_filename_num(self, filename):
         return filename.split('_')[-1].split('.')[0]
@@ -75,22 +75,23 @@ class image_processer:
         logger.debug('Finished stitching image')
 
         # rotate the film to the correct orientation
-        oriented_image = self.ocr_reader.orient(stitched_image)
+        oriented_image = self.ocr_reader.orient(stitched_image, logger)
         if oriented_image is None:
             logger.warning('Could not determine the correct orientation of the film. Skipping batch!')
             return self.noop(image_data, image_processer.COULD_NOT_ORIENT_FILM)
         logger.debug('Finished orienting image')
 
+        '''
         cv2.imwrite('/home/ubuntu/test.tif', oriented_image)
-        return ''
+        '''
 
         # perform OCR
-        text_detections = 1
-        #text_detections = self.ocr_reader.find_text(oriented_image)
+        text_detections = self.ocr_reader.find_text(oriented_image, logger)
         if text_detections is None:
             logger.warning('Could not find text on the stitched film strip. Skipping batch!')
             return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
         logger.debug('Finished detecting text in the image')
+
 
         # check that the recognized text is sensible
         # TODO(jremmons) write code to verify the detected text

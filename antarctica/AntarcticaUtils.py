@@ -1,4 +1,5 @@
 import cv2
+import os
 import pickle
 import pyocr
 import pyocr.builders
@@ -11,20 +12,30 @@ from matplotlib import pyplot as plt
 from PIL import Image
 
 class BasicOCRReader:
-    def __init__(self, logger):
-        # self.logger = logger
+
+
+    def __init__(self):
 
         self.tool = pyocr.get_available_tools()[0]
         
-        self.TARGET_SIZE = 50
         with open('/home/ubuntu/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
             self.OCR_model = pickle.loads(f.read())
+
+        numbers = ['0.png', '1.png', '2.png', '3.png', '4.png', '5.png', '6.png', '7.png', '8.png', '9.png']
+        self.num_templates = []
+        for number in numbers:
+            template = cv2.imread(os.path.join('/home/ubuntu/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
+            self.num_templates.append(template.astype(np.uint8))
+        self.number_height = 50
+        self.number_padding = 40
+
+        self.number_spacing = 1250
         
     def get_ocr_tool_name(self):
 
         return self.tool.get_name()
 
-    def orient(self, filmstrip):
+    def orient(self, filmstrip, logger):
 
         h, w = filmstrip.shape
 
@@ -35,68 +46,220 @@ class BasicOCRReader:
         y22 = int(0.795*h + p*h)
 
         # perform some kind of heuristic to determine the correct orientation
-
+        
         # god only knows knows why we need the copy...
-        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
-        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
+        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
+        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
         
         return filmstrip
     
-    def find_text(self, filmstrip):
+    def find_text(self, oriented_filmstrip, logger):
 
-        h, w = filmstrip.shape
+        h, w = oriented_filmstrip.shape
+       
+        y11 = int(0)
+        y12 = int(0.25*h)
+        y21 = int(0.65*h)
+        y22 = int(h)
 
-        p = 0.1
-        x11 = int(0.10*w - p*w)
-        x12 = int(0.13*w + p*w)
-        x21 = int(0.78*w - p*w)
-        x22 = int(0.81*w + p*w)
+        top_line = (oriented_filmstrip[y11:y12, :] * (255 / 65535.0)).astype(np.uint8)
+        bottom_line = (oriented_filmstrip[y21:y22, :] * (255 / 65535.0)).astype(np.uint8)
+
+        top_thres = cv2.adaptiveThreshold(top_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+        bottom_thres = cv2.adaptiveThreshold(bottom_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+
+        top_yres = []
+        bottom_yres = []
+        for template in self.num_templates:
+            top_res = cv2.matchTemplate(top_thres, template, cv2.TM_CCOEFF_NORMED)
+            top_y, topx = np.where(top_res >= 0.8)
+            if top_y.any():
+                top_yres.append(np.median(top_y))
+            
+            bottom_res = cv2.matchTemplate(bottom_thres, template, cv2.TM_CCOEFF_NORMED)
+            bottom_y, bottom_x = np.where(bottom_res >= 0.8)
+            if bottom_y.any():
+                bottom_yres.append(np.median(bottom_y))
+            # TODO(jremmons) add a check so that uncertainty in the number position is considered
+                
+        top_centerline = int(np.average(top_yres) + self.number_height/2)
+        bottom_centerline = int(np.average(bottom_yres) + self.number_height/2)
+
+        '''
+        #top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
+        #bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
+        #cv2.imwrite('/home/ubuntu/roi1.png', top_line)
+        #cv2.imwrite('/home/ubuntu/roi2.png', bottom_line)
+        '''
         
-        self._find_text(filmstrip, (x11,x12))
-        self._find_text(filmstrip, (x21,x22))
+        top_textline = oriented_filmstrip[y11+top_centerline-self.number_padding:y11+top_centerline+self.number_padding, :]
+        bottom_textline = oriented_filmstrip[y21+bottom_centerline-self.number_padding:y21+bottom_centerline+self.number_padding, :]
 
-        return None
+        '''
+        #cv2.imwrite('/home/ubuntu/roi1.png', top_textline)
+        #cv2.imwrite('/home/ubuntu/roi2.png', bottom_textline)
+        '''
         
-    def _hog_OCR(self, char):
+        top_detections = self._recognize_text(top_textline, logger)
+        bottom_detections = self._recognize_text(bottom_textline, logger)
+
+        success, interpretation = self._interpret_text(top_detections, bottom_detections)
+        
+        if(not success):
+            return None
+
+        return interpretation
+        
+    def _interpret_text(self, top_detections, bottom_detections):
+
+        # gather statistics about the detected characters
+        def stats(arr):
+            median = np.median(arr)
+            average = np.average(arr)
+            std = np.std(arr)
+            mid = median if abs(average - median) > std/2.0 else average
+
+            return median, average, mid, std
+            
+
+        top_y1 = np.array(list(map(lambda x : x['y1'], top_detections)))
+        top_y1_median, top_y1_average, top_y1_std, top_y1_mid = stats(top_y1)
+
+        top_y2 = np.array(list(map(lambda x : x['y2'], top_detections)))
+        top_y2_median, top_y2_average, top_y2_std, top_y2_mid = stats(top_y2)
+        
+        bottom_y1 = np.array(list(map(lambda x : x['y1'], bottom_detections)))
+        bottom_y1_median, bottom_y1_average, bottom_y1_std, bottom_y1_mid = stats(bottom_y1)
+
+        bottom_y2 = np.array(list(map(lambda x : x['y2'], bottom_detections)))
+        bottom_y2_median, bottom_y2_average, bottom_y2_std, bottom_y2_mid = stats(bottom_y2)
+
+        # split the detected characters into groups
+        top_groups = []
+        current_group = []
+        current_x = top_detections[0]['x1']
+        for detection in top_detections:
+            if(detection['x1'] < current_x + self.number_spacing):
+                current_x = detection['x1']
+                current_group.append(detection)
+            else:
+                top_groups.append(current_group)
+
+                current_x = detection['x1']
+                current_group = [detection]
+
+        bottom_groups = []
+        current_group = []
+        current_x = bottom_detections[0]['x1']
+        for detection in bottom_detections:
+            if(detection['x1'] < current_x + self.number_spacing):
+                current_x = detection['x1']
+                current_group.append(detection)
+            else:
+                bottom_groups.append(current_group)
+
+                current_x = detection['x1']
+                current_group = [detection]
+
+        # TODO(jremmons) do something with the stats on the digit locations
+                
+        # perform an intelligent recognition on the top strip
+        # should be the date; expressed as two 6-digit numbers
+        date = []
+        time = []
+        top_errors = 0
+        for group in top_groups:
+            if(len(group) != 12):
+                top_errors += 1
+                continue
+
+            group_date = ''
+            for i in range(0,6):
+                group_date += group[i]['char']
+            date.append(int(group_date))
+
+            group_time = ''
+            for i in range(6,12):
+                group_time += group[i]['char']
+            time.append(int(group_time))
+
+        print(date)
+        print(time)
+        
+        # perform an intelligent recognition on the bottom strip
+        # should be a 4-digit setting, 3-digit flight, and 6-digit cbd
+        setting_number = []
+        flight_number = []
+        cbd_number = []
+        bottom_errors = 0
+        for group in bottom_groups:
+            if(len(group) != 11):
+                bottom_errors += 1
+                continue
+
+            group_setting = ''
+            for i in range(0, 4):
+                group_setting += group[i]['char']
+            setting_number.append(int(group_setting))
+
+            group_flight = ''
+            for i in range(4, 7):
+                group_flight += group[i]['char']
+            flight_number.append(int(group_flight))
+
+            group_cbd = ''
+            for i in range(7, 11):
+                group_cbd += group[i]['char']
+            cbd_number.append(int(group_cbd))
+
+        print(setting_number)
+        print(flight_number)
+        print(cbd_number)
+        print(top_errors)
+        print(bottom_errors)
+        
+        #TODO(jremmons) do something with this information
+        
+        return None, None
+            
+    def _hog_OCR(self, char, logger):
 
         char = cv2.resize(char,
-                          (self.TARGET_SIZE, self.TARGET_SIZE),
+                          (self.number_height, self.number_height),
                           cv2.INTER_CUBIC)
 
-        features = hog(char).reshape(1,-1)
+        features = hog(char, block_norm='L2').reshape(1,-1)
         prediction = self.OCR_model.predict(features)
         prediction = str(prediction[0])
         
         return prediction
 
-    def _find_text(self, filmstrip, roi):
+    def _recognize_text(self, textline, logger):
 
-        h, w = filmstrip.shape
-        x1, x2 = roi
-           
-        # perform text detection
-        edges = cv2.Canny(filmstrip[:, x1:x2].astype(np.uint8), 100, 200)
-        
-        edges = np.amax(edges, axis=1)
+        h, w = textline.shape
+        uint8_textline = (textline * (255 / 65535.0)).astype(np.uint8)
+
+        edges = cv2.Canny(uint8_textline, 100, 200)
+
+        edges = np.amax(edges, axis=0)
         edges = scipy.ndimage.filters.median_filter(edges, 50) 
         edges = scipy.ndimage.filters.maximum_filter1d(edges, 100) 
         edges[0] = 0
-        edges[h-1] = 0
+        edges[w-1] = 0
 
         edge_locs = np.nonzero(edges[:-1] - edges[1:])[0]
         assert( len(edge_locs) % 2 == 0)
 
+        text_detections = []        
+        segment_number = 0
         for i in range(0, len(edge_locs), 2):
-            y1 = edge_locs[i]
-            y2 = edge_locs[i+1]
-            length = y2 - y1
+            x1 = edge_locs[i]
+            x2 = edge_locs[i+1]
+            length = x2 - x1
             
             # perform recognition
-            segment = filmstrip[y1:y2, x1:x2].astype(np.uint8)
-            segment = np.flip(np.transpose(segment), 1)
+            segment = uint8_textline[:, x1:x2]
 
-            segment = cv2.fastNlMeansDenoising(segment)
-            
             char_boxes = self.tool.image_to_string(
                 Image.fromarray(segment),
                 lang='glacierdigits3',
@@ -105,41 +268,94 @@ class BasicOCRReader:
 
             # record and label film strip
             for box in char_boxes:
-                (char_y2, char_x2), (char_y1, char_x1) = box.position
+                (char_x1, char_y1), (char_x2, char_y2) = box.position
 
-                char_y1 = length - char_y1
-                char_y2 = length - char_y2
-                char_length = char_y2 - char_y1
-                                
-                if(char_length < 10 or char_length > 50):
-                    # self.logger.debug('invalid char dims; skipping')
+                # the output of tesseract has the origin in the lower-left (not the usual upper-left convention)
+                char_y1 = h - char_y1
+                char_y2 = h - char_y2
+                char_y1, char_y2 = char_y2, char_y1
+
+                char_height = char_y2 - char_y1
+                char_length = char_x2 - char_x1
+                
+                if(char_length < 10 or char_length > 50 or
+                   char_height < 10 or char_height > 100):
+                    logger.debug('invalid char dims; skipping!')
                     continue
-
-                hog_recognition = self._hog_OCR(segment[char_x2:char_x1, (length-char_y2):(length-char_y1)].astype(np.uint8))
+                
+                hog_recognition = self._hog_OCR(segment[char_y1:char_y2, char_x1:char_x2].astype(np.uint8), logger)
                 if(box.content != hog_recognition):
-                    # self.logger.debug('mismatch between tesseract and hog', box.content, hog_recognition)
+                    logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
 
                     if(box.content in ['0', '8'] and
                        hog_recognition in ['0', '8']):
                         box.content = hog_recognition
-
+                        
                     if(box.content in ['1', '7'] and
                        hog_recognition in ['1', '7']):
                         box.content = hog_recognition
-                
-                filmstrip = cv2.rectangle(filmstrip, (x1, y1+char_y1), (x2, y1+char_y2), (0,0,0))
 
+                '''
+                #logger.debug('add rectangles around the characters')
+                #textline = cv2.rectangle(textline.copy(), (x1+char_x1, char_y1), (x1+char_x2, char_y2), (0,0,0))
+                '''
+                
                 text = '?'
                 if not box.content.isspace():
+                    assert(len(box.content) == 1)
                     text = box.content
-                    
-                filmstrip = cv2.putText(filmstrip, text, (x1, y1+char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
 
-        return filmstrip
-        #cv2.imwrite('/home/ubuntu/test.png', filmstrip)
+                '''
+                #textline = cv2.putText(textline.copy(), text, (x1+char_x1+20, char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
+                '''
+
+                detection = {'char' : text,
+                             'x1' : x1+char_x1,
+                             'x2' : x1+char_x2,
+                             'y1' : char_y1,
+                             'y2' : char_y2,
+                             'segment': segment_number}
+
+                text_detections.append(detection)
+            segment_number += 1
+                
+        return text_detections
         
 class BasicFilmstripStitcher:
 
+    @staticmethod
+    def stitch(uint16_images, logger=None):
+
+        converted_images = []
+        for uint16_image in uint16_images:
+            assert(uint16_image.dtype == np.uint16)
+            float_image = cv2.convertScaleAbs(uint16_image, alpha=(255.0/65535.0))
+            converted_images.append(float_image)
+
+        if logger:
+            logger.debug('Finsihed image conversion to float')
+
+        alignments = []
+        for i in range(len(converted_images)-1):
+            first = converted_images[i]
+            second = converted_images[i+1]
+            alignments.append( BasicFilmstripStitcher._align(first, second, logger) )
+            
+        if logger:
+            logger.debug('Finsihed alignment')
+
+        stitched_image = uint16_images[0]
+        for i in range(1, len(uint16_images)):
+            uint16_image = uint16_images[i]
+            alignment = alignments[i-1]
+
+            stitched_image = BasicFilmstripStitcher._stitch(stitched_image, uint16_image, alignment, logger)
+            
+        if logger:
+            logger.debug('Finished stitching images')
+
+        return np.flip(np.transpose(stitched_image), 1)
+    
     @staticmethod
     def _align(first, second, logger):
         '''
@@ -219,36 +435,3 @@ class BasicFilmstripStitcher:
             second[alignment['second_top_margin']+alignment['overlap']:, :]
 
         return img
-
-    @staticmethod
-    def stitch(uint16_images, logger=None):
-
-        converted_images = []
-        for uint16_image in uint16_images:
-            assert(uint16_image.dtype == np.uint16)
-            float_image = cv2.convertScaleAbs(uint16_image, alpha=(255.0/65535.0))
-            converted_images.append(float_image)
-
-        if logger:
-            logger.debug('Finsihed image conversion to float')
-
-        alignments = []
-        for i in range(len(converted_images)-1):
-            first = converted_images[i]
-            second = converted_images[i+1]
-            alignments.append( BasicFilmstripStitcher._align(first, second, logger) )
-            
-        if logger:
-            logger.debug('Finsihed alignment')
-
-        stitched_image = uint16_images[0]
-        for i in range(1, len(uint16_images)):
-            uint16_image = uint16_images[i]
-            alignment = alignments[i-1]
-
-            stitched_image = BasicFilmstripStitcher._stitch(stitched_image, uint16_image, alignment, logger)
-            
-        if logger:
-            logger.debug('Finished stitching images')
-
-        return np.flip(np.transpose(stitched_image), 1)

@@ -30,7 +30,7 @@ for d in data:
     #cv2.imshow('img', char)
     #cv2.waitKey()
 
-    data_features.append( hog(char) )
+    data_features.append( hog(char, block_norm='L2') )
     data_labels.append( num )
 
 data_features = np.array(data_features, dtype=np.float64)
@@ -41,13 +41,13 @@ data_labels = np.array(data_labels, dtype=np.int32)
 
 model = LinearSVC()
 model.fit(data_features, data_labels)
-error1 = model.score(data_features, data_labels)
+error1 = 1 - model.score(data_features, data_labels)
 
 with open('model.pkl', 'wb') as f:
     f.write( pickle.dumps(model) )
 
 with open('model.pkl', 'rb') as f:
     model2 = pickle.loads(f.read())
-    error2 = model2.score(data_features, data_labels)
+    error2 = 1- model2.score(data_features, data_labels)
     assert(error1 == error2)
     print('Training error', error1)
