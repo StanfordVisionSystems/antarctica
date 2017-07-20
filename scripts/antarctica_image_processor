@@ -106,7 +106,7 @@ class image_processer:
 def main(args):
 
     logger.info('Using {} worker(s)'.format(args.num_workers))
-    #pool = mp.Pool(args.num_workers) #TODO(jremmons) make the code parallel
+    pool = mp.Pool(args.num_workers)
 
     logger.debug('Checking if {} exists'.format(args.output_dir))
     try:
@@ -146,8 +146,7 @@ def main(args):
             batches.append(macro_batch[i:i+BATCH_SIZE])
 
         CSVrows = itertools.chain.from_iterable(
-            #pool.map(image_processer(), batches)
-            map(image_processer(), [batches[0]])
+            pool.map(image_processer(), batches[0:2])
         )
         
         with open(args.output_csv, 'a') as f:

@@ -1,3 +1,4 @@
+import collections
 import cv2
 import os
 import pickle
@@ -95,32 +96,24 @@ class BasicOCRReader:
         top_textline = oriented_filmstrip[y11+top_centerline-self.number_padding:y11+top_centerline+self.number_padding, :]
         bottom_textline = oriented_filmstrip[y21+bottom_centerline-self.number_padding:y21+bottom_centerline+self.number_padding, :]
 
-        '''
-        #cv2.imwrite('/home/ubuntu/roi1.png', top_textline)
-        #cv2.imwrite('/home/ubuntu/roi2.png', bottom_textline)
-        '''
-        
         top_detections = self._recognize_text(top_textline, logger)
         bottom_detections = self._recognize_text(bottom_textline, logger)
 
-        success, interpretation = self._interpret_text(top_detections, bottom_detections)
-        
-        if(not success):
-            return None
-
+        interpretation = self._interpret_text(top_detections, bottom_detections, h, w, logger)        
         return interpretation
         
-    def _interpret_text(self, top_detections, bottom_detections):
+    def _interpret_text(self, top_detections, bottom_detections, h, w, logger):
 
+        ################################################################################ 
         # gather statistics about the detected characters
+        ################################################################################ 
         def stats(arr):
             median = np.median(arr)
             average = np.average(arr)
             std = np.std(arr)
             mid = median if abs(average - median) > std/2.0 else average
 
-            return median, average, mid, std
-            
+            return median, average, mid, std            
 
         top_y1 = np.array(list(map(lambda x : x['y1'], top_detections)))
         top_y1_median, top_y1_average, top_y1_std, top_y1_mid = stats(top_y1)
@@ -163,70 +156,246 @@ class BasicOCRReader:
 
         # TODO(jremmons) do something with the stats on the digit locations
                 
+        ################################################################################ 
+        # parse the digits
+        ################################################################################ 
+        def parse_grouping(group, interval):
+            digits = ''
+            for i in range(interval[0], interval[1]):
+                digits += group[i]['char']
+
+            return digits
+
         # perform an intelligent recognition on the top strip
         # should be the date; expressed as two 6-digit numbers
-        date = []
-        time = []
-        top_errors = 0
+        date_numbers = []
+        time_numbers = []
+        top_successes = 0
         for group in top_groups:
             if(len(group) != 12):
-                top_errors += 1
+                date_numbers.append(None)
+                time_numbers.append(None)
                 continue
 
-            group_date = ''
-            for i in range(0,6):
-                group_date += group[i]['char']
-            date.append(int(group_date))
+            date_numbers.append(parse_grouping(group, (0,6)))
+            time_numbers.append(parse_grouping(group, (6,12)))
+            
+            top_successes += 1
 
-            group_time = ''
-            for i in range(6,12):
-                group_time += group[i]['char']
-            time.append(int(group_time))
-
-        print(date)
-        print(time)
-        
         # perform an intelligent recognition on the bottom strip
         # should be a 4-digit setting, 3-digit flight, and 6-digit cbd
-        setting_number = []
-        flight_number = []
-        cbd_number = []
-        bottom_errors = 0
+        setting_numbers = []
+        flight_numbers = []
+        cbd_numbers = []
+        bottom_successes = 0
         for group in bottom_groups:
             if(len(group) != 11):
-                bottom_errors += 1
+                setting_numbers.append(None)
+                flight_numbers.append(None)
+                cbd_numbers.append(None)
                 continue
 
-            group_setting = ''
-            for i in range(0, 4):
-                group_setting += group[i]['char']
-            setting_number.append(int(group_setting))
+            setting_numbers.append(parse_grouping(group, (0,4)))
+            flight_numbers.append(parse_grouping(group, (4,7)))
+            cbd_numbers.append(parse_grouping(group, (7,11)))
+            bottom_successes += 1
 
-            group_flight = ''
-            for i in range(4, 7):
-                group_flight += group[i]['char']
-            flight_number.append(int(group_flight))
+        ################################################################################ 
+        # perform sanity check to ensure enough digits were parsed from the film
+        ################################################################################ 
 
-            group_cbd = ''
-            for i in range(7, 11):
-                group_cbd += group[i]['char']
-            cbd_number.append(int(group_cbd))
+        expected_groups = int(w / (self.number_spacing + 850))
+        if top_successes / expected_groups < 0.75:
+            logger.warning('too many errors (>25%) when parsing the top line; skipping batch!')
+            return None
 
-        print(setting_number)
-        print(flight_number)
-        print(cbd_number)
-        print(top_errors)
-        print(bottom_errors)
+        if bottom_successes / expected_groups < 0.75:
+            logger.warning('too many errors (>25%) when parsing the bottom line; skipping batch!')
+            return None
+
+        ################################################################################ 
+        # perform semantic sanity check on the "constant" digits from each segment
+        ################################################################################ 
+
+        def interpert_constants(numbers):
+            counter = collections.Counter()
+            for number in numbers:
+                counter[number] += 1
+
+            ret = counter.most_common(2)
+            if len(ret) == 2:
+                most_common, second_most_common = counter.most_common(2)
+                return most_common, second_most_common
+            else:
+                return ret[0], ('NaN', 0)
+            
+        date_most_common, date_second_most_common = interpert_constants(date_numbers)
+        if date_most_common[1] < 4*date_second_most_common[1]:
+            logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
+            return None
+        date_number_final = date_most_common[0]
         
-        #TODO(jremmons) do something with this information...
+        setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
+        if setting_most_common[1] < 4*setting_second_most_common[1]:
+            logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
+            return None
+        setting_number_final = setting_most_common[0]
+        
+        flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
+        if flight_most_common[1] < 4*flight_second_most_common[1]:
+            logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
+            return None
+        flight_number_final = flight_most_common[0]
+        
+        ################################################################################ 
+        # perform indepth sanity check on cbds
+        ################################################################################ 
+        cbd_deltas = []
+        for i in range(1, len(cbd_numbers)):
+            if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
 
-        #TODO(jremmons) check that the date is constant (allow for 1 or 2 error)
-        #TODO(jremmons) check that the time is incrementing in roughly the same interval each time
-        #TODO(jremmons) check that the settings remain constant
-        #TODO(jremmons) check that the flight number is constant
-        #TODO(jremmons) check that the cbd is incrementing by the same interval each time
+        cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
+        if cbd_delta_most_common[1] < 4*cbd_delta_second_most_common[1]:
+            logger.warning('too many errors (>25%) when interperting the cbd_delta; skipping batch!')
+            return None
 
-        return None, None
+        if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
+            logger.warning('invalid cbd_delta (should be -1 or 1, but it was {}); skipping batch!'.format(cbd_delta_most_common[0]))
+            return None
+        
+        cbd_delta_number_final = cbd_delta_most_common[0]
+
+        # fill in the missing/incorrectly recognized CBDs
+        # TODO(jremmons) confirm that the edits made are correct (i.e. check the residual)
+        cbd_fix = []
+        for i in range(1, len(cbd_numbers)):
+            if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
+                    cbd_fix.append(int(cbd_numbers[i-1]))
+                    continue
+            cbd_fix.append(None)
+
+        cbd_first_idx = 0
+        for i in range(len(cbd_fix)):
+            if cbd_fix[i] is not None:
+                cbd_first_idx = i
+                break
+
+        for i in range(len(cbd_fix)):
+            if cbd_fix[i] is None:
+                cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
+                
+        cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
+ 
+        ################################################################################ 
+        # perform indepth sanity check on time values
+        ################################################################################ 
+        def time_sanity_check(t):
+            if t is None:
+                return None
+
+            if t[0] not in [ str(i) for i in range(0,3)]:
+                logger.debug('the time value {} is not well-formed in digit 0 ({} not in [0-2])'.format(t, t[0]))
+                return None
+            if t[1] not in [ str(i) for i in range(0,10)]:
+                logger.debug('the time value {} is not well-formed in digit 1 ({} not in [0-9])'.format(t, t[1]))
+                return None
+            if t[2] not in [ str(i) for i in range(0,6)]:
+                logger.debug('the time value {} is not well-formed in digit 2 ({} not in [0-6])'.format(t, t[2]))
+                return None
+            if t[3] not in [ str(i) for i in range(0,10)]:
+                logger.debug('the time value {} is not well-formed in digit 3 ({} not in [0-9])'.format(t, t[3]))
+                return None
+            if t[4] not in [ str(i) for i in range(0,6)]:
+                logger.debug('the time value {} is not well-formed in digit 4 ({} not in [0-5])'.format(t, t[4]))
+                return None
+            if t[5] not in [ str(i) for i in range(0,10)]:
+                logger.debug('the time value {} is not well-formed in digit 5 ({} not in [0-9])'.format(t, t[5]))
+                return None
+
+            return t
+            
+        def time2sec(t):
+            if t is None:
+                return None
+            
+            hour = int(t[0:2])
+            minute = int(t[2:4])
+            second = int(t[4:6])
+
+            return 3600*hour + 60*minute + second
+            
+        def sec2time(n):
+            if n is None:
+                return None
+
+            hour = n // 3600
+            n -= 3600 * hour
+
+            minute = n // 60
+            n -= 60*minute
+
+            second = n
+            return str(hour).zfill(2) + str(minute).zfill(2) + str(second).zfill(2)
+            
+        # fix the missing/incorrectly recognized time values        
+        time_numbers_seconds = list(map(time2sec, map(time_sanity_check, time_numbers)))
+
+        # TODO(jremmons) make sure there are enough time values to 
+
+        time_deltas = []
+        for i in range(1, len(time_numbers_seconds)):
+            if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
+                time_deltas.append(int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]))
+
+        time_delta_most_common, time_delta_second_most_common = interpert_constants(time_deltas)
+        if time_delta_most_common[1] < 4*time_delta_second_most_common[1]:
+            logger.warning('too many errors (>25%) when interperting the time_delta; skipping batch!')
+            return None
+
+        if time_delta_most_common[0] != 15 and time_delta_most_common[0] != -15: 
+            logger.warning('invalid time_delta (should be -15 or 15, but it was {}); skipping batch!'.format(time_delta_most_common[0]))
+            return None
+        
+        time_delta_number_final = time_delta_most_common[0]
+
+        # fill in the missing/incorrectly recognized TIMEs
+        # TODO(jremmons) confirm that the edits made are correct (i.e. check the residual)
+        time_fix = []
+        for i in range(1, len(time_numbers_seconds)):
+            if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
+                if int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]) == time_delta_number_final:
+                    time_fix.append(int(time_numbers_seconds[i-1]))
+                    continue
+            time_fix.append(None)
+
+        time_first_idx = 0
+        for i in range(len(time_fix)):
+            if time_fix[i] is not None:
+                time_first_idx = i
+                break
+
+        for i in range(len(time_fix)):
+            if time_fix[i] is None:
+                time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
+                
+        time_final = list(map(str, map(sec2time, time_fix)))
+
+        ################################################################################ 
+        # gather the data needed for the interpretation
+        ################################################################################ 
+        interpretation = {
+            'date' : date_number_final,
+            'time1' : time_final[0],
+            'time2' : time_final[-1],
+            'setting' : setting_number_final,
+            'flight' : flight_number_final,
+            'cbd1' : cbd_final[0],
+            'cbd2' : cbd_final[-1],
+        }
+        
+        return interpretation
             
     def _hog_OCR(self, char, logger):
 
