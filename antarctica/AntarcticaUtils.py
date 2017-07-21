@@ -92,14 +92,37 @@ class BasicOCRReader:
         #cv2.imwrite('/home/ubuntu/roi1.png', top_line)
         #cv2.imwrite('/home/ubuntu/roi2.png', bottom_line)
         '''
-        
-        top_textline = oriented_filmstrip[y11+top_centerline-self.number_padding:y11+top_centerline+self.number_padding, :]
-        bottom_textline = oriented_filmstrip[y21+bottom_centerline-self.number_padding:y21+bottom_centerline+self.number_padding, :]
+
+        top_y1 = y11+top_centerline-self.number_padding
+        top_y2 = y11+top_centerline+self.number_padding
+        top_textline = oriented_filmstrip[top_y1:top_y2, :]
+
+        bottom_y1 = y21+bottom_centerline-self.number_padding
+        bottom_y2 = y21+bottom_centerline+self.number_padding
+        bottom_textline = oriented_filmstrip[bottom_y1:bottom_y2, :]
 
         top_detections = self._recognize_text(top_textline, logger)
         bottom_detections = self._recognize_text(bottom_textline, logger)
 
-        return top_detections, bottom_detections
+        top_detections_final = []
+        for d in top_detections:
+            d['xmin'] = d['x1']
+            d['xmax'] = d['x2']
+            d['ymin'] = d['y1'] + top_y1 
+            d['ymax'] = d['y2'] + top_y1 
+            d['recognition_type'] = 'number_char'
+            top_detections_final.append(d)
+
+        bottom_detections_final = []
+        for d in bottom_detections:
+            d['xmin'] = d['x1']
+            d['xmax'] = d['x2']
+            d['ymin'] = d['y1'] + bottom_y1 
+            d['ymax'] = d['y2'] + bottom_y1 
+            d['recognition_type'] = 'number_char'
+            bottom_detections_final.append(d)
+        
+        return top_detections_final, bottom_detections_final
         
     def _interpret_text(self, text_detections, shape, logger):
         top_detections, bottom_detections = text_detections
@@ -160,11 +183,38 @@ class BasicOCRReader:
         ################################################################################ 
         # parse the digits
         ################################################################################ 
-        def parse_grouping(group, interval):
-            digits = ''
-            for i in range(interval[0], interval[1]):
-                digits += group[i]['char']
+        number_groups = []
+        def parse_grouping(group, interval, t):
 
+            xmin = group[interval[0]]['xmin']
+            xmax = group[interval[0]]['xmax']
+            ymin = group[interval[0]]['ymin']
+            ymax = group[interval[0]]['ymax']
+            
+            digits = ''
+            for i in range(interval[0], interval[1]):                
+                group[i]['number_type'] = t
+
+                if group[i]['xmin'] < xmin:
+                    xmin = group[i]['xmin']
+                if group[i]['xmax'] > xmax:
+                    xmax = group[i]['xmax']
+                if group[i]['ymin'] < ymin:
+                    ymin = group[i]['ymin']
+                if group[i]['ymax'] > ymax:
+                    ymax = group[i]['ymax']
+
+                digits += group[i]['char']
+                
+            number_group = {'xmin' : str(xmin),
+                            'xmax' : str(xmax),
+                            'ymin' : str(ymin),
+                            'ymax' : str(ymax),
+                            'number_type' : t,
+                            'chars' : digits,
+                            'recognition_type' : 'number_group'}
+            
+            number_groups.append(number_group)
             return digits
 
         # perform an intelligent recognition on the top strip
@@ -178,8 +228,8 @@ class BasicOCRReader:
                 time_numbers.append(None)
                 continue
 
-            date_numbers.append(parse_grouping(group, (0,6)))
-            time_numbers.append(parse_grouping(group, (6,12)))
+            date_numbers.append(parse_grouping(group, (0,6),'date'))
+            time_numbers.append(parse_grouping(group, (6,12),'time'))
             
             top_successes += 1
 
@@ -196,9 +246,9 @@ class BasicOCRReader:
                 cbd_numbers.append(None)
                 continue
 
-            setting_numbers.append(parse_grouping(group, (0,4)))
-            flight_numbers.append(parse_grouping(group, (4,7)))
-            cbd_numbers.append(parse_grouping(group, (7,11)))
+            setting_numbers.append(parse_grouping(group, (0,4),'setting'))
+            flight_numbers.append(parse_grouping(group, (4,7),'flight'))
+            cbd_numbers.append(parse_grouping(group, (7,11),'cbd'))
             bottom_successes += 1
 
         ################################################################################ 
@@ -396,7 +446,7 @@ class BasicOCRReader:
             'cbd2' : cbd_final[-1],
         }
         
-        return interpretation
+        return interpretation, number_groups
             
     def _hog_OCR(self, char, logger):
 

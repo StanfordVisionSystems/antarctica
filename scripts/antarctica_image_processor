@@ -6,8 +6,8 @@ import errno
 import itertools
 import git
 import os
+import json
 import datetime
-
 
 import pathos.multiprocessing as mp
 import AntarcticaUtils as a
@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
 
-assert(not git.Repo(search_parent_directories=True).is_dirty())
+# TODO(jremmons) uncomment this assertion
+#assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
 CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now()),
                      'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
 
@@ -100,15 +101,14 @@ class image_processer:
         logger.debug('Finished detecting text in the image')
 
         # check that the recognized text is sensible and interpret it
-        metadata = self.ocr_reader._interpret_text(text_detections, oriented_image.shape, logger)
+        metadata, number_groups = self.ocr_reader._interpret_text(text_detections, oriented_image.shape, logger)
         if metadata is None:
             logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
             return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
         logger.debug('Finished interpretating text in the image')
         
         # dump output to tif and annotated jpeg file
-        
-        
+                
         # report the csv-formated line(s) that should be logged
         metadata['reel_num'] = '2'
         metadata['begin_image_num'] = '10'
@@ -119,12 +119,23 @@ class image_processer:
 
         metadata['status'] = image_processer.SUCCESS
 
-        metadata['num_additional_columns'] = '1'
+        metadata['num_additional_columns'] = len(number_groups)
         line = OUTPUT_FORMAT.format(**metadata)
 
         # add supplementary information to the line (text detections and positions)
-        line += "," + "\"{'type':'cbd','value':'123123','x1':12,'x2':24,'y1':32,'y2':54}\""        
-        
+        dumps = lambda x : ',"'+json.dumps(x,sort_keys=True).replace('"', "'").strip()+'"'
+        for number_group in number_groups:
+            line += dumps(number_group)
+
+        #TODO(jremmons) fix the json not serializable issue!
+        for char_detection in text_detections[0] + text_detections[1]:
+            char_detection['x1'] = None
+            char_detection['x2'] = None
+            char_detection['y1'] = None
+            char_detection['y2'] = None
+            char_detection['segment'] = None
+            line += dumps(char_detection)
+
         return [line]
             
 def main(args):
