@@ -99,11 +99,12 @@ class BasicOCRReader:
         top_detections = self._recognize_text(top_textline, logger)
         bottom_detections = self._recognize_text(bottom_textline, logger)
 
-        interpretation = self._interpret_text(top_detections, bottom_detections, h, w, logger)        
-        return interpretation
+        return top_detections, bottom_detections
         
-    def _interpret_text(self, top_detections, bottom_detections, h, w, logger):
-
+    def _interpret_text(self, text_detections, shape, logger):
+        top_detections, bottom_detections = text_detections
+        h, w = shape
+        
         ################################################################################ 
         # gather statistics about the detected characters
         ################################################################################ 

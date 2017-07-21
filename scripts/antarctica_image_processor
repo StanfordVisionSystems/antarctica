@@ -4,7 +4,10 @@ import argparse
 import cv2
 import errno
 import itertools
+import git
 import os
+import datetime
+
 
 import pathos.multiprocessing as mp
 import AntarcticaUtils as a
@@ -17,13 +20,21 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
 
+assert(not git.Repo(search_parent_directories=True).is_dirty())
+CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now()),
+                     'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
+
+OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{high_res_filename},{low_res_filename},{status},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{num_additional_columns}'
+
 class image_processer:
 
-    INCORRECT_NUM_IMAGES = 0
-    COULD_NOT_READ_IMAGE = 1
-    COULD_NOT_STITCH_FILM = 2
-    COULD_NOT_ORIENT_FILM = 3
-    COULD_NOT_FIND_TEXT = 4
+    SUCCESS = '0_success'
+    INCORRECT_NUM_IMAGES = '1_not_enough_images_in_batch'
+    COULD_NOT_READ_IMAGE = '2_image_read_error'
+    COULD_NOT_STITCH_FILM = '3_image_stitch_error'
+    COULD_NOT_ORIENT_FILM = '4_image_orientation_error'
+    COULD_NOT_FIND_TEXT = '5_image_find_text_error'
+    COULD_PARSE_TEXT = '6_image_parse_text_error'
     
     def __init__(self):
         self.ocr_reader = a.BasicOCRReader()
@@ -81,10 +92,6 @@ class image_processer:
             return self.noop(image_data, image_processer.COULD_NOT_ORIENT_FILM)
         logger.debug('Finished orienting image')
 
-        '''
-        cv2.imwrite('/home/ubuntu/test.tif', oriented_image)
-        '''
-
         # perform OCR
         text_detections = self.ocr_reader.find_text(oriented_image, logger)
         if text_detections is None:
@@ -92,17 +99,34 @@ class image_processer:
             return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
         logger.debug('Finished detecting text in the image')
 
-
-        # check that the recognized text is sensible
-        # TODO(jremmons) write code to verify the detected text
+        # check that the recognized text is sensible and interpret it
+        metadata = self.ocr_reader._interpret_text(text_detections, oriented_image.shape, logger)
+        if metadata is None:
+            logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
+            return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
+        logger.debug('Finished interpretating text in the image')
         
         # dump output to tif and annotated jpeg file
         
+        
         # report the csv-formated line(s) that should be logged
+        metadata['reel_num'] = '2'
+        metadata['begin_image_num'] = '10'
+        metadata['end_image_num'] = '30'
+
+        metadata['high_res_filename'] = 'blah.tif'
+        metadata['low_res_filename'] = 'blah.jpg'
+
+        metadata['status'] = image_processer.SUCCESS
+
+        metadata['num_additional_columns'] = '1'
+        line = OUTPUT_FORMAT.format(**metadata)
+
+        # add supplementary information to the line (text detections and positions)
+        line += "," + "\"{'type':'cbd','value':'123123','x1':12,'x2':24,'y1':32,'y2':54}\""        
         
-        cv2.waitKey()
-        return ''
-        
+        return [line]
+            
 def main(args):
 
     logger.info('Using {} worker(s)'.format(args.num_workers))
@@ -125,7 +149,6 @@ def main(args):
         f.write('\n')
         
     logger.info('Initialization completed')
-
     logger.debug('Preparing macro batches for processing')    
     if args.flush_interval is None:
         macro_batches = [args.images]
@@ -136,9 +159,7 @@ def main(args):
             macro_batches.append(args.images[i:i+macro_batch_size])
             
     logger.info('Batches preapred (begin processing)')
-            
     logger.debug('Processing data in %d batch(es)' % len(macro_batches))
-            
     logger.debug('Begin processing batch(es)')
     for macro_batch in macro_batches:
         batches = []
@@ -150,12 +171,16 @@ def main(args):
         )
         
         with open(args.output_csv, 'a') as f:
-            f.write('\n'.join(CSVrows))
-        logger.debug('Completed a macro batch')
+            for line in CSV_COMMENT_LINES:
+                f.write('# ' + line.strip() + '\n')
 
+            header = OUTPUT_FORMAT.replace('{', '').replace('}', '').strip()
+            f.write(header+'\n')
+            f.write('\n'.join(CSVrows))
+
+        logger.debug('Completed a macro batch')
             
     logger.debug('Finished processing batch(es)')
-
     logger.info('Done!')
         
 if __name__ == '__main__':
