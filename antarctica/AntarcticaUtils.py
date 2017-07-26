@@ -106,19 +106,19 @@ class BasicOCRReader:
 
         top_detections_final = []
         for d in top_detections:
-            d['xmin'] = d['x1']
-            d['xmax'] = d['x2']
-            d['ymin'] = d['y1'] + top_y1 
-            d['ymax'] = d['y2'] + top_y1 
+            d['xmin'] = str(d['x1'])
+            d['xmax'] = str(d['x2'])
+            d['ymin'] = str(d['y1'] + top_y1 )
+            d['ymax'] = str(d['y2'] + top_y1)
             d['recognition_type'] = 'number_char'
             top_detections_final.append(d)
 
         bottom_detections_final = []
         for d in bottom_detections:
-            d['xmin'] = d['x1']
-            d['xmax'] = d['x2']
-            d['ymin'] = d['y1'] + bottom_y1 
-            d['ymax'] = d['y2'] + bottom_y1 
+            d['xmin'] = str(d['x1'])
+            d['xmax'] = str(d['x2'])
+            d['ymin'] = str(d['y1'] + bottom_y1)
+            d['ymax'] = str(d['y2'] + bottom_y1)
             d['recognition_type'] = 'number_char'
             bottom_detections_final.append(d)
         

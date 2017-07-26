@@ -6,7 +6,7 @@ import errno
 import itertools
 import git
 import os
-import json
+import simplejson
 import datetime
 
 import pathos.multiprocessing as mp
@@ -104,7 +104,7 @@ class image_processer:
         metadata, number_groups = self.ocr_reader._interpret_text(text_detections, oriented_image.shape, logger)
         if metadata is None:
             logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
-            return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
+            return self.noop(image_data, image_processer.COULD_NOT_PARSE_TEXT)
         logger.debug('Finished interpretating text in the image')
         
         # dump output to tif and annotated jpeg file
@@ -119,11 +119,11 @@ class image_processer:
 
         metadata['status'] = image_processer.SUCCESS
 
-        metadata['num_additional_columns'] = len(number_groups)
+        metadata['num_additional_columns'] = len(number_groups) + len(text_detections[0]) + len(text_detections[1])
         line = OUTPUT_FORMAT.format(**metadata)
 
         # add supplementary information to the line (text detections and positions)
-        dumps = lambda x : ',"'+json.dumps(x,sort_keys=True).replace('"', "'").strip()+'"'
+        dumps = lambda x : ',"' + simplejson.dumps(x,sort_keys=True).replace('"', "'").strip() + '"'
         for number_group in number_groups:
             line += dumps(number_group)
 
@@ -157,7 +157,11 @@ def main(args):
         
     logger.debug('Checking if {} exists'.format(args.output_csv))
     with open(args.output_csv, 'x') as f:
-        f.write('\n')
+        for line in CSV_COMMENT_LINES:
+            f.write('# ' + line.strip() + '\n')
+
+        header = OUTPUT_FORMAT.replace('{', '').replace('}', '').strip()
+        f.write(header+'\n')
         
     logger.info('Initialization completed')
     logger.debug('Preparing macro batches for processing')    
@@ -182,11 +186,6 @@ def main(args):
         )
         
         with open(args.output_csv, 'a') as f:
-            for line in CSV_COMMENT_LINES:
-                f.write('# ' + line.strip() + '\n')
-
-            header = OUTPUT_FORMAT.replace('{', '').replace('}', '').strip()
-            f.write(header+'\n')
             f.write('\n'.join(CSVrows))
 
         logger.debug('Completed a macro batch')
