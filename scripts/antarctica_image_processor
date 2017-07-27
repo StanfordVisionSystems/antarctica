@@ -165,8 +165,10 @@ def main(args):
         
     logger.info('Initialization completed')
     logger.debug('Preparing macro batches for processing')    
-    if args.flush_interval is None:
+    if args.flush_interval is -1:
         macro_batches = [args.images]
+    elif args.flush_interval is 0:
+        logger.error('0 is not a valid flush interval (use -1 to disable flushing)')
     else:
         macro_batch_size = BATCH_SIZE * args.flush_interval * args.num_workers
         macro_batches = []
@@ -207,10 +209,10 @@ if __name__ == '__main__':
                         dest='flush_interval',
                         metavar='flush_interval',
                         type=int,
-                        help='number of batches to process before flushing results to output.csv (default: flush every batch)',
-                        default=None)# TODO(jremmons) make flushing default
+                        help='number of batches to process before flushing results to output.csv (default: flush every batch); to disable flushing pass -1',
+                        default=1)
 
-    parser.add_argument('-o',
+    parser.add_argument('--output',
                         dest='output_dir',
                         metavar='output_dir',
                         type=str,
