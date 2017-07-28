@@ -19,13 +19,13 @@ class BasicOCRReader:
 
         self.tool = pyocr.get_available_tools()[0]
         
-        with open('/home/ubuntu/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
+        with open('/home/jemmons/Research/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
             self.OCR_model = pickle.loads(f.read())
 
         numbers = ['0.png', '1.png', '2.png', '3.png', '4.png', '5.png', '6.png', '7.png', '8.png', '9.png']
         self.num_templates = []
         for number in numbers:
-            template = cv2.imread(os.path.join('/home/ubuntu/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
+            template = cv2.imread(os.path.join('/home/jemmons/Research/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
             self.num_templates.append(template.astype(np.uint8))
         self.number_height = 50
         self.number_padding = 40
@@ -565,8 +565,13 @@ class BasicFilmstripStitcher:
         for i in range(len(converted_images)-1):
             first = converted_images[i]
             second = converted_images[i+1]
-            alignments.append( BasicFilmstripStitcher._align(first, second, logger) )
-            
+
+            alignment = BasicFilmstripStitcher._align(first, second, logger)
+            if alignment is None:
+                return None
+
+            alignments.append(alignment)
+                
         if logger:
             logger.debug('Finsihed alignment')
 
@@ -612,10 +617,9 @@ class BasicFilmstripStitcher:
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
             if logger:
-                self.logger.error('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
-
+                logger.error('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
             return None
-            #max_loc = (120, 110) # TODO(jremmons) default offset
+            #match_x, match_y = (120, 110) # TODO(jremmons) default offset
             
         # return the alignment so that stitching can be performed
         alignment = {
