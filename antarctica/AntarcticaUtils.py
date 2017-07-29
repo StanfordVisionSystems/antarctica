@@ -47,10 +47,12 @@ class BasicOCRReader:
         y22 = int(0.795*h + p*h)
 
         # perform some kind of heuristic to determine the correct orientation
-        
+
+        '''
         # god only knows knows why we need the copy...
-        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
-        #filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
+        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
+        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
+        '''
         
         return filmstrip
     
@@ -87,10 +89,10 @@ class BasicOCRReader:
         bottom_centerline = int(np.average(bottom_yres) + self.number_height/2)
 
         '''
-        #top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
-        #bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
-        #cv2.imwrite('/home/ubuntu/roi1.png', top_line)
-        #cv2.imwrite('/home/ubuntu/roi2.png', bottom_line)
+        top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
+        bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
+        cv2.imwrite('/home/ubuntu/roi1.png', top_line)
+        cv2.imwrite('/home/ubuntu/roi2.png', bottom_line)
         '''
 
         top_y1 = y11+top_centerline-self.number_padding
@@ -123,7 +125,30 @@ class BasicOCRReader:
             bottom_detections_final.append(d)
         
         return top_detections_final, bottom_detections_final
+
+    @staticmethod
+    def annotate_image(image, number_groups, logger):
+        image = image.copy()
         
+        logger.debug('Adding char labels to image')
+            
+        for number_group in number_groups:
+            if number_group['recognition_type'] != 'number_group':
+                logger.debug('Skipping number')
+                continue
+
+            chars = number_group['chars']
+
+            xmin = int(number_group['xmin'])
+            xmax = int(number_group['xmax'])
+            ymin = int(number_group['ymin'])
+            ymax = int(number_group['ymax'])
+            image = cv2.rectangle(image, (xmin-3, ymin-3), (xmax+3, ymax+3), (0,0,0), thickness=6)
+            image = cv2.putText(image, chars, (xmin, ymax+60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
+
+        return image
+            
+
     def _interpret_text(self, text_detections, shape, logger):
         top_detections, bottom_detections = text_detections
         h, w = shape
@@ -617,7 +642,8 @@ class BasicFilmstripStitcher:
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
             if logger:
-                logger.error('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
+                #logger.error('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
+                logger.error('Horizontal alignment off by {}. Skipping batch'.format(match_x - x1))
             return None
             #match_x, match_y = (120, 110) # TODO(jremmons) default offset
             

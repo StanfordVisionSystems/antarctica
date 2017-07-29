@@ -10,6 +10,7 @@ import simplejson
 import datetime
 
 import pathos.multiprocessing as mp
+import numpy as np
 import AntarcticaUtils as a
 
 import logging
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # number of frames to stitch together
 BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
+RESULTS_IMAGE_DIRNAME = 'stitched_images'
 
 # TODO(jremmons) uncomment this assertion
 #assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
@@ -27,18 +29,25 @@ CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now()),
 
 OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{high_res_filename},{low_res_filename},{status},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{num_additional_columns}'
 
+OUTPUT_IMAGE_FILENAME_FORMAT = '{}_{}_{}-reel_image_image.{}'
+OUTPUT_SMALL_IMAGE_FACTOR = 1/3.16227766017 # 1/sqrt(10)
+
 class image_processer:
 
     SUCCESS = '0_success'
-    INCORRECT_NUM_IMAGES = '1_not_enough_images_in_batch'
-    COULD_NOT_READ_IMAGE = '2_image_read_error'
-    COULD_NOT_STITCH_FILM = '3_image_stitch_error'
-    COULD_NOT_ORIENT_FILM = '4_image_orientation_error'
-    COULD_NOT_FIND_TEXT = '5_image_find_text_error'
-    COULD_NOT_PARSE_TEXT = '6_image_parse_text_error'
+    COULD_NOT_PARSE_IMAGE_FILENAME = '1_malformed_image_filename'
+    INCORRECT_NUM_IMAGES = '2_not_enough_images_in_batch'
+    COULD_NOT_READ_IMAGE = '3_image_read_error'
+    COULD_NOT_STITCH_FILM = '4_image_stitch_error'
+    COULD_NOT_ORIENT_FILM = '5_image_orientation_error'
+    COULD_NOT_FIND_TEXT = '6_image_find_text_error'
+    COULD_NOT_PARSE_TEXT = '7_image_parse_text_error'
+    COULD_NOT_WRITE_STITCHED_IMAGE = '8_could_not_write_stitched_image'
     
-    def __init__(self):
+    def __init__(self, reel_num, output_dir):
         self.ocr_reader = a.BasicOCRReader()
+        self.output_dir = output_dir
+        self.reel_num = reel_num
         
     def get_filename_num(self, filename):
         return filename.split('_')[-1].split('.')[0]
@@ -50,15 +59,23 @@ class image_processer:
         
     def __call__(self, images):
 
+        logger.debug('processing images in reel {}'.format(self.reel_num))
+
         image_data = {'nums' : [], 'min' : None, 'max' : None, 'rasters' : []}
-        for image in images:
-            num = self.get_filename_num(image)
-            image_data['nums'].append(num)
+        try:
+            for image in images:
+                num = self.get_filename_num(image)
+                image_data['nums'].append(num)
+        except:
+            logger.error('input filename is malformed; could not parse image number: begin_image_num={} end_image_num={}'.format(begin_image_num, end_image_num))
+            return self.noop(images, image_processer.COULD_NOT_PARSE_IMAGE_FILENAME)
 
         range_min = min(image_data['nums'])
-        range_max = min(image_data['nums'])
+        range_max = max(image_data['nums'])
         image_data['min'] = range_min
         image_data['max'] = range_max
+        logger.debug('processing images {} to {}'.format(image_data['min'], image_data['max']))
+
         logger.debug('Created metadata store')
         
         # check the size of the batch
@@ -67,7 +84,8 @@ class image_processer:
             return self.noop(image_data, image_processer.INCORRECT_NUM_IMAGES)
 
         # attempt to open the images
-        image_data = { 'nums' : [], 'rasters' : [] }
+        image_data['nums'] = []
+        image_data['rasters'] = []
         for image in images:
             num = self.get_filename_num(image)
             raster = cv2.imread(image, cv2.IMREAD_UNCHANGED)
@@ -108,16 +126,33 @@ class image_processer:
 
         metadata, number_groups = interpretation
         logger.debug('Finished interpretating text in the image')
-        
-        # dump output to tif and annotated jpeg file
                 
-        # report the csv-formated line(s) that should be logged
-        metadata['reel_num'] = '2'
-        metadata['begin_image_num'] = '10'
-        metadata['end_image_num'] = '30'
+        # dump output to tiff and annotated jpeg file
+        tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, image_data['min'], image_data['max'], 'tiff'))
+        jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, image_data['min'], image_data['max'], 'jpg'))
 
-        metadata['high_res_filename'] = 'blah.tif'
-        metadata['low_res_filename'] = 'blah.jpg'
+        ret = cv2.imwrite(tiff_filename, oriented_image)
+        if not ret:
+            logger.warning('Could not write tiff output to disk (ret={}); skipping batch!'.format(ret))
+            return self.noop(image_data, image_processer.COULD_NOT_WRITE_STITCHED_IMAGE)
+
+        oriented_image_labelled = a.BasicOCRReader.annotate_image(oriented_image, number_groups, logger)
+        oriented_image_small = cv2.resize(oriented_image_labelled, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
+        oriented_image_small = (oriented_image_small * (255 / 65535.0)).astype(np.uint8)
+        ret = cv2.imwrite(jpg_filename, oriented_image_small)
+        if not ret:
+            logger.warning('Could not write jpg output to disk (ret={}); skipping batch!'.format(ret))
+            return self.noop(image_data, image_processer.COULD_NOT_WRITE_STITCHED_IMAGE)
+
+        logger.debug('Finished writing the stitched image to disk')
+        
+        # report the csv-formated line(s) that should be logged
+        metadata['reel_num'] = self.reel_num
+        metadata['begin_image_num'] = image_data['min']
+        metadata['end_image_num'] = image_data['max']
+
+        metadata['high_res_filename'] = tiff_filename
+        metadata['low_res_filename'] = jpg_filename
 
         metadata['status'] = image_processer.SUCCESS
 
@@ -129,13 +164,12 @@ class image_processer:
         for number_group in number_groups:
             line += dumps(number_group)
 
-        #TODO(jremmons) fix the json not serializable issue!
         for char_detection in text_detections[0] + text_detections[1]:
-            char_detection['x1'] = None
-            char_detection['x2'] = None
-            char_detection['y1'] = None
-            char_detection['y2'] = None
-            char_detection['segment'] = None
+            del char_detection['x1']
+            del char_detection['x2']
+            del char_detection['y1']
+            del char_detection['y2']
+            del char_detection['segment']
             line += dumps(char_detection)
 
         return [line]
@@ -154,8 +188,10 @@ def main(args):
             return 
         else:
             raise e
-    
+
     args.output_csv = os.path.join(args.output_dir, RESULTS_FILENAME)
+    args.output_image_dir = os.path.join(args.output_dir, RESULTS_IMAGE_DIRNAME)
+    os.makedirs(args.output_image_dir)
         
     logger.debug('Checking if {} exists'.format(args.output_csv))
     with open(args.output_csv, 'x') as f:
@@ -186,7 +222,7 @@ def main(args):
             batches.append(macro_batch[i:i+BATCH_SIZE])
 
         CSVrows = itertools.chain.from_iterable(
-            pool.map(image_processer(), batches)
+            pool.map(image_processer(args.reel_num, args.output_dir), batches)
         )
         
         with open(args.output_csv, 'a') as f:
@@ -206,6 +242,12 @@ if __name__ == '__main__':
                         type=int,
                         help='num worker processes to use (default: num cores on machine)',
                         default=os.cpu_count())
+
+    parser.add_argument('--reel',
+                        dest='reel_num',
+                        metavar='reel_num',
+                        type=str,
+                        help='the reel number to use in the csv output')
 
     parser.add_argument('--flush',
                         dest='flush_interval',
