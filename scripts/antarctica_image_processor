@@ -14,7 +14,7 @@ import numpy as np
 import AntarcticaUtils as a
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # number of frames to stitch together
@@ -22,8 +22,7 @@ BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
 RESULTS_IMAGE_DIRNAME = 'stitched_images'
 
-# TODO(jremmons) uncomment this assertion
-#assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
+assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
 CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now()),
                      'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
 
@@ -48,26 +47,92 @@ class image_processer:
         self.ocr_reader = a.BasicOCRReader()
         self.output_dir = output_dir
         self.reel_num = reel_num
+        self.count = 0
         
     def get_filename_num(self, filename):
         return filename.split('_')[-1].split('.')[0]
 
     def noop(self, image_data, reason):
-        # TODO(jremmons) write out image files
-        # log the error in the CSV file
-        return ''
+
+        logger.debug('performing noop for images because of: {}'.format(reason))
+
+        # loop over the images
+        image_names = None
+        if reason == image_processer.COULD_NOT_PARSE_IMAGE_FILENAME:
+            image_names = image_data
+        else:
+            image_names = image_data['images']
+
+        lines = []
+        for image in image_names:
+            try:
+                num = self.get_filename_num(image)
+            except:
+                logger.debug('Could not parse the image number from the filename {}; using global counter'.format(image))
+                num = str(self.count)
+                self.count += 1
+
+            d = {
+                'reel_num' : self.reel_num,
+                'begin_image_num' : num,
+                'end_image_num' : num,
+                'high_res_filename' : '',
+                'low_res_filename' : '',
+                'status' : reason,
+                'date' : '',
+                'time1' : '',
+                'time2' : '',
+                'setting' : '',
+                'flight' : '', 
+                'cbd1' : '', 
+                'cbd2' : '', 
+                'num_additional_columns' : '0', 
+            }
+            
+            im = cv2.imread(image)
+            if im is None:
+                lines.append(OUTPUT_FORMAT.format(**d))
+                continue
+                
+            tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, num, num, 'tiff'))
+            jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, num, num, 'jpg'))
+
+            ret = cv2.imwrite(tiff_filename, im)
+            if not ret:
+                logger.debug('Could not process {}. Adding partial noop line'.format(image))
+                lines.append(OUTPUT_FORMAT.format(**d))
+                continue
+            
+            d['high_res_filename'] = tiff_filename
+            
+            im_small = cv2.resize(im, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
+            im_small = (im_small * (255 / 65535.0)).astype(np.uint8)
+            ret = cv2.imwrite(jpg_filename, im_small)
+
+            if not ret:
+                logger.debug('Could not process {}. Adding partial noop line'.format(image))
+                lines.append(OUTPUT_FORMAT.format(**d))
+                continue
+
+            d['low_res_filename'] = jpg_filename
+            
+            lines.append(OUTPUT_FORMAT.format(**d))
+
+            logger.debug('Added noop line for image {}'.format(image))
+            
+        return lines
         
     def __call__(self, images):
 
         logger.debug('processing images in reel {}'.format(self.reel_num))
 
-        image_data = {'nums' : [], 'min' : None, 'max' : None, 'rasters' : []}
+        image_data = {'images' : images, 'nums' : [], 'min' : None, 'max' : None, 'rasters' : []}
         try:
             for image in images:
                 num = self.get_filename_num(image)
                 image_data['nums'].append(num)
         except:
-            logger.error('input filename is malformed; could not parse image number: begin_image_num={} end_image_num={}'.format(begin_image_num, end_image_num))
+            logger.error('input filename is malformed; could not parse image number')
             return self.noop(images, image_processer.COULD_NOT_PARSE_IMAGE_FILENAME)
 
         range_min = min(image_data['nums'])
