@@ -642,10 +642,10 @@ class BasicFilmstripStitcher:
         match_x, match_y = max_loc
         if( abs(match_x - x1) > 5 ):
             if logger:
-                #logger.error('Horizontal alignment off by {}. Using default offset values (120, 110)'.format(match_x - x1))
-                logger.error('Horizontal alignment off by {}. Skipping batch'.format(match_x - x1))
-            return None
-            #match_x, match_y = (120, 110) # TODO(jremmons) default offset
+                logger.error('Horizontal alignment off by {}. Using default offset values (x1=120, x2=110, y=0)'.format(match_x - x1))
+                logger.warning('Horizontal alignment off by {}. Skipping batch'.format(match_x - x1))
+            #return None
+            match_x, match_y = (120, 110) # TODO(jremmons) default offset
             
         # return the alignment so that stitching can be performed
         alignment = {
