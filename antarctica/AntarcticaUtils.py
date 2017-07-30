@@ -30,6 +30,13 @@ class BasicOCRReader:
         self.number_height = 50
         self.number_padding = 40
 
+        backwards_numbers = ['3.png', '4.png', '6.png', '7.png', '9.png']
+        self.backwards_num_templates = []
+        for number in backwards_numbers:
+            template = cv2.imread(os.path.join('/home/jemmons/Research/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
+            template = cv2.flip(template, 1)
+            self.backwards_num_templates.append(template.astype(np.uint8))
+
         self.number_spacing = 1250
         
     def get_ocr_tool_name(self):
@@ -37,23 +44,43 @@ class BasicOCRReader:
         return self.tool.get_name()
 
     def orient(self, filmstrip, logger):
-
+        return filmstrip
+        #TODO(jremmons) make this work...
         h, w = filmstrip.shape
 
-        p = 0.05
-        y11 = int(0.115*h - p*h)
-        y12 = int(0.115*h + p*h)
-        y21 = int(0.795*h - p*h)
-        y22 = int(0.795*h + p*h)
-
-        # perform some kind of heuristic to determine the correct orientation
-
-        '''
-        # god only knows knows why we need the copy...
-        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y11), (w, y12), (0,0,0), thickness=5)
-        filmstrip = cv2.rectangle(filmstrip.copy(), (0, y21), (w, y22), (0,0,0), thickness=5)
-        '''
+        logger.debug('orienting the filmstrip')
         
+        p = 0.05
+        y11 = int(0)
+        y12 = int(0.25*h)
+        y21 = int(0.65*h)
+        y22 = int(h)
+
+        # perform a heuristic to fix the orientation (look for backwars digits)
+        top_line = (filmstrip[y11:y12, :] * (255 / 65535.0)).astype(np.uint8)
+        bottom_line = (filmstrip[y21:y22, :] * (255 / 65535.0)).astype(np.uint8)
+
+        top_thres = cv2.adaptiveThreshold(top_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+        bottom_thres = cv2.adaptiveThreshold(bottom_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+
+        flip_evidence = 0
+        for template in self.backwards_num_templates:
+            top_res = cv2.matchTemplate(top_thres, template, cv2.TM_CCOEFF_NORMED)
+            top_y, top_x = np.where(top_res >= 0.8)
+            if top_y.any():
+                flip_evidence += 1
+            
+            bottom_res = cv2.matchTemplate(bottom_thres, template, cv2.TM_CCOEFF_NORMED)
+            bottom_y, bottom_x = np.where(bottom_res >= 0.8)
+            if bottom_y.any():
+                flip_evidence += 1
+
+        print(flip_evidence)
+        cv2.imwrite('/home/jemmons/im.jpg', (filmstrip[:, :] * (255 / 65535.0)).astype(np.uint8))
+        if flip_evidence > 4:
+            logger.critical('flipped the flipstrip!')
+            filmstrip = v2.flip(filmstrip.copy(), 1)
+                
         return filmstrip
     
     def find_text(self, oriented_filmstrip, logger):
@@ -75,7 +102,7 @@ class BasicOCRReader:
         bottom_yres = []
         for template in self.num_templates:
             top_res = cv2.matchTemplate(top_thres, template, cv2.TM_CCOEFF_NORMED)
-            top_y, topx = np.where(top_res >= 0.8)
+            top_y, top_x = np.where(top_res >= 0.8)
             if top_y.any():
                 top_yres.append(np.median(top_y))
             
@@ -306,19 +333,19 @@ class BasicOCRReader:
                 return ret[0], ('NaN', 0)
             
         date_most_common, date_second_most_common = interpert_constants(date_numbers)
-        if date_most_common[1] < 4*date_second_most_common[1]:
+        if date_most_common[1] < 2*date_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
             return None
         date_number_final = date_most_common[0]
         
         setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
-        if setting_most_common[1] < 4*setting_second_most_common[1]:
+        if setting_most_common[1] < 2*setting_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
             return None
         setting_number_final = setting_most_common[0]
         
         flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
-        if flight_most_common[1] < 4*flight_second_most_common[1]:
+        if flight_most_common[1] < 2*flight_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
             return None
         flight_number_final = flight_most_common[0]
@@ -332,8 +359,8 @@ class BasicOCRReader:
                 cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
 
         cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
-        if cbd_delta_most_common[1] < 4*cbd_delta_second_most_common[1]:
-            logger.warning('too many errors (>25%) when interperting the cbd_delta; skipping batch!')
+        if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
+            logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
             return None
 
         if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
@@ -426,7 +453,7 @@ class BasicOCRReader:
                 time_deltas.append(int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]))
 
         time_delta_most_common, time_delta_second_most_common = interpert_constants(time_deltas)
-        if time_delta_most_common[1] < 4*time_delta_second_most_common[1]:
+        if time_delta_most_common[1] < 2*time_delta_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the time_delta; skipping batch!')
             return None
 
