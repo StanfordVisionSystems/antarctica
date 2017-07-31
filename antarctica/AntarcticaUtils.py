@@ -75,7 +75,6 @@ class BasicOCRReader:
             if bottom_y.any():
                 flip_evidence += 1
 
-        print(flip_evidence)
         cv2.imwrite('/home/jemmons/im.jpg', (filmstrip[:, :] * (255 / 65535.0)).astype(np.uint8))
         if flip_evidence > 4:
             logger.critical('flipped the flipstrip!')
@@ -174,7 +173,29 @@ class BasicOCRReader:
             image = cv2.putText(image, chars, (xmin, ymax+60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
 
         return image
+
+    @staticmethod
+    def annotate_image_digits(image, number_groups, logger):
+        image = image.copy()
+        
+        logger.debug('Adding char labels to image')
             
+        for number_group in number_groups:
+            if number_group['recognition_type'] != 'number_char':
+                logger.debug('Skipping number')
+                continue
+
+            chars = number_group['char']
+
+            xmin = int(number_group['xmin'])
+            xmax = int(number_group['xmax'])
+            ymin = int(number_group['ymin'])
+            ymax = int(number_group['ymax'])
+            image = cv2.rectangle(image, (xmin-3, ymin-3), (xmax+3, ymax+3), (0,0,0), thickness=6)
+            image = cv2.putText(image, chars, (xmin, ymax+60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
+
+        return image
+
 
     def _interpret_text(self, text_detections, shape, logger):
         top_detections, bottom_detections = text_detections
@@ -231,7 +252,7 @@ class BasicOCRReader:
                 current_group = [detection]
 
         # TODO(jremmons) do something with the stats on the digit locations
-                
+        
         ################################################################################ 
         # parse the digits
         ################################################################################ 
@@ -269,6 +290,8 @@ class BasicOCRReader:
             number_groups.append(number_group)
             return digits
 
+        # TODO(jremmons) handle missing digit cases
+        
         # perform an intelligent recognition on the top strip
         # should be the date; expressed as two 6-digit numbers
         date_numbers = []
@@ -276,6 +299,7 @@ class BasicOCRReader:
         top_successes = 0
         for group in top_groups:
             if(len(group) != 12):
+                logger.debug('incorrect number of digits in the top line: 12!={}'.format(len(group)))
                 date_numbers.append(None)
                 time_numbers.append(None)
                 continue
@@ -293,6 +317,7 @@ class BasicOCRReader:
         bottom_successes = 0
         for group in bottom_groups:
             if(len(group) != 11):
+                logger.debug('incorrect number of digits in the bottom line: 11!={}'.format(len(group)))
                 setting_numbers.append(None)
                 flight_numbers.append(None)
                 cbd_numbers.append(None)
@@ -307,13 +332,13 @@ class BasicOCRReader:
         # perform sanity check to ensure enough digits were parsed from the film
         ################################################################################ 
 
-        expected_groups = int(w / (self.number_spacing + 850))
-        if top_successes / expected_groups < 0.75:
-            logger.warning('too many errors (>25%) when parsing the top line; skipping batch!')
+        #expected_groups = int(w / (self.number_spacing + 850))
+        if top_successes < 5:
+            logger.warning('too many errors (< 5 good detections: {}) when parsing the top line; skipping batch!'.format(top_successes))
             return None
 
-        if bottom_successes / expected_groups < 0.75:
-            logger.warning('too many errors (>25%) when parsing the bottom line; skipping batch!')
+        if bottom_successes < 5:
+            logger.warning('too many errors (< 5 good detections: {}) when parsing the bottom line; skipping batch!'.format(bottom_successes))
             return None
 
         ################################################################################ 
@@ -335,7 +360,8 @@ class BasicOCRReader:
         date_most_common, date_second_most_common = interpert_constants(date_numbers)
         if date_most_common[1] < 2*date_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
-            return None
+            #return None#TODO(jremmons) remove this
+            date_number_final = ''#TODO(jremmons) remove this
         date_number_final = date_most_common[0]
         
         setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
@@ -563,7 +589,7 @@ class BasicOCRReader:
                 
                 hog_recognition = self._hog_OCR(segment[char_y1:char_y2, char_x1:char_x2].astype(np.uint8), logger)
                 if(box.content != hog_recognition):
-                    logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
+                    #logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
 
                     if(box.content in ['0', '8'] and
                        hog_recognition in ['0', '8']):
@@ -602,7 +628,7 @@ class BasicOCRReader:
 class BasicFilmstripStitcher:
 
     @staticmethod
-    def stitch(uint16_images, logger=None):
+    def stitch(uint16_images, logger):
 
         converted_images = []
         for uint16_image in uint16_images:
@@ -634,8 +660,7 @@ class BasicFilmstripStitcher:
 
             stitched_image = BasicFilmstripStitcher._stitch(stitched_image, uint16_image, alignment, logger)
             
-        if logger:
-            logger.debug('Finished stitching images')
+        logger.debug('Finished stitching images')
 
         return np.flip(np.transpose(stitched_image), 1)
     

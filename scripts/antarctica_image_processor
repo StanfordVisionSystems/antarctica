@@ -66,7 +66,7 @@ class image_processer:
             'reel_num' : self.reel_num,
             'begin_image_num' : image_data['min'],
             'end_image_num' : image_data['max'],
-            'horizontal_flip' : 'false',
+            'horizontal_flip' : '',
             'vertical_flip' : 'false',
             'high_res_filename' : '',
             'low_res_filename' : '',
@@ -82,7 +82,11 @@ class image_processer:
         }
 
         if reason not in [image_processer.COULD_NOT_PARSE_IMAGE_FILENAME, image_processer.INCORRECT_NUM_IMAGES, image_processer.COULD_NOT_READ_IMAGE]:
-            im = image_data['oriented_image']
+            im = image_data['try_oriented_image']
+
+            d['horizontal_flip'] = image_data['horizontal_flip']
+            d['vertical_flip'] = image_data['vertical_flip']
+            d['num_additional_columns'] = len(image_data['text_detections'][0]) + len(image_data['text_detections'][1])
             
             if im is None:
                 lines.append(OUTPUT_FORMAT.format(**d))
@@ -96,8 +100,10 @@ class image_processer:
                 lines.append(OUTPUT_FORMAT.format(**d))
         
             d['high_res_filename'] = tiff_filename
-        
-            im_small = cv2.resize(im, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
+
+            oriented_image_labelled = a.BasicOCRReader.annotate_image_digits(im, image_data['text_detections'][0]+image_data['text_detections'][1], logger)
+            
+            im_small = cv2.resize(oriented_image_labelled, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
             im_small = (im_small * (255 / 65535.0)).astype(np.uint8)
             ret = cv2.imwrite(jpg_filename, im_small)
         
@@ -106,8 +112,18 @@ class image_processer:
                 lines.append(OUTPUT_FORMAT.format(**d))
 
             d['low_res_filename'] = jpg_filename
-        
-            return [OUTPUT_FORMAT.format(**d)]
+
+            line = OUTPUT_FORMAT.format(**d)
+            dumps = lambda x : ',"' + simplejson.dumps(x,sort_keys=True).replace('"', "'").strip() + '"'
+            for char_detection in image_data['text_detections'][0] + image_data['text_detections'][1]:
+                del char_detection['x1']
+                del char_detection['x2']
+                del char_detection['y1']
+                del char_detection['y2']
+                del char_detection['segment']
+                line += dumps(char_detection)
+            
+            return [line]
 
         else:
 
@@ -245,10 +261,17 @@ class image_processer:
         ########################################################################
         metadata = None
         number_groups = None
-        end = False
-        for orientation in [(False, False), (False, True), (True, False), (True, True)]:
-            horizontal_flip = 'false'
-            vertical_flip = 'false'
+        end = 0
+        max_detections = 0
+        horizontal_flip = 'false'
+        vertical_flip = 'false'
+        image_data['horizontal_flip'] = horizontal_flip
+        image_data['vertical_flip'] = vertical_flip
+        image_data['try_oriented_image'] = oriented_image
+        image_data['text_detections'] = ([], [])
+        for orientation in [(False, False), (True, True), (True, False), (False, True)]:
+            logger.debug('trying orientation horizontal:{} vertical:{}'.format(orientation[0], orientation[1]))
+            end += 1
             
             try_image_orientation = oriented_image.copy()
             if orientation[1]:
@@ -257,20 +280,27 @@ class image_processer:
             if orientation[0]:
                 try_image_orientation = cv2.flip(try_image_orientation, 1)
                 horizontal_flip = 'true'
-            if orientation[0] and orientation[1]:
-                end = True
                 
             try:
                 text_detections = self.ocr_reader.find_text(try_image_orientation, logger)
             except:
                 text_detections = None
             if text_detections is None:
-                if not end:
+                if end < 4:
                     continue
                 logger.warning('Could not find text on the stitched film strip. Skipping batch!')
                 return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
             logger.debug('Finished detecting text in the image')
-                
+
+            if len(text_detections[0]) + len(text_detections[1]) > max_detections:
+                logger.debug('new best detection')
+                max_detections = len(text_detections[0]) + len(text_detections[1])
+
+                image_data['horizontal_flip'] = horizontal_flip
+                image_data['vertical_flip'] = vertical_flip
+                image_data['try_oriented_image'] = try_image_orientation
+                image_data['text_detections'] = text_detections
+            
             ########################################################################
             # check that the recognized text is sensible and interpret it
             ########################################################################
@@ -279,7 +309,7 @@ class image_processer:
             except:
                 interpretation = None
             if interpretation is None:
-                if not end:
+                if end < 4:
                     continue
                 logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
                 return self.noop(image_data, image_processer.COULD_NOT_PARSE_TEXT)
