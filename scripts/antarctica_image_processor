@@ -22,11 +22,11 @@ BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
 RESULTS_IMAGE_DIRNAME = 'stitched_images'
 
-#assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
+assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
 CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now()),
                      'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
 
-OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{horizontal_flip},{vertical_flip},{high_res_filename},{low_res_filename},{status},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{num_additional_columns}'
+OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{horizontal_flip},{vertical_flip},{high_res_filename},{low_res_filename},{status},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{cbd1_fractional},{cbd2_fractional},{num_additional_columns}'
 
 OUTPUT_IMAGE_FILENAME_FORMAT = '{}_{}_{}-reel_image_image.{}'
 OUTPUT_SMALL_IMAGE_FACTOR = 1/3.16227766017 # 1/sqrt(10)
@@ -287,9 +287,12 @@ class image_processer:
                 text_detections = None
             if text_detections is None:
                 if end < 4:
+                    logger.warning('Could not stitched film strip. Trying a new orientation')
                     continue
+
                 logger.warning('Could not find text on the stitched film strip. Skipping batch!')
                 return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
+
             logger.debug('Finished detecting text in the image')
 
             if len(text_detections[0]) + len(text_detections[1]) > max_detections:
@@ -304,13 +307,16 @@ class image_processer:
             ########################################################################
             # check that the recognized text is sensible and interpret it
             ########################################################################
+            interpretation = self.ocr_reader._interpret_text(text_detections, try_image_orientation.shape, logger)
             try:
                 interpretation = self.ocr_reader._interpret_text(text_detections, try_image_orientation.shape, logger)
             except:
                 interpretation = None
             if interpretation is None:
                 if end < 4:
+                    logger.warning('Could not interpret text on the stitched film strip. Trying a new orientation')
                     continue
+
                 logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
                 return self.noop(image_data, image_processer.COULD_NOT_PARSE_TEXT)
             

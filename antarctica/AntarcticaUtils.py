@@ -45,6 +45,8 @@ class BasicOCRReader:
 
     def orient(self, filmstrip, logger):
         return filmstrip
+
+
         #TODO(jremmons) make this work...
         h, w = filmstrip.shape
 
@@ -360,8 +362,7 @@ class BasicOCRReader:
         date_most_common, date_second_most_common = interpert_constants(date_numbers)
         if date_most_common[1] < 2*date_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
-            #return None#TODO(jremmons) remove this
-            date_number_final = ''#TODO(jremmons) remove this
+            return None
         date_number_final = date_most_common[0]
         
         setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
@@ -405,6 +406,25 @@ class BasicOCRReader:
                     continue
             cbd_fix.append(None)
 
+        valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
+        valid_cbd2_num = str(list(filter(None, cbd_fix))[-1]).zfill(4)
+        
+        cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
+
+        valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
+        valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
+        assert(len(valid_cbd1) == 1) # only matching cbd allowed
+        assert(len(valid_cbd2) == 1) # only matching cbd allowed
+        valid_cbd1 = valid_cbd1[0]
+        valid_cbd2 = valid_cbd2[0]
+
+        cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
+        cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
+        cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
+        
+        cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
+        cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
+        
         cbd_first_idx = 0
         for i in range(len(cbd_fix)):
             if cbd_fix[i] is not None:
@@ -413,8 +433,8 @@ class BasicOCRReader:
 
         for i in range(len(cbd_fix)):
             if cbd_fix[i] is None:
-                cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
-                
+                cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)                    
+
         cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
  
         ################################################################################ 
@@ -522,6 +542,8 @@ class BasicOCRReader:
             'flight' : flight_number_final,
             'cbd1' : cbd_final[0],
             'cbd2' : cbd_final[-1],
+            'cbd1_fractional' : cbd1_fractional,
+            'cbd2_fractional' : cbd2_fractional
         }
         
         return interpretation, number_groups
