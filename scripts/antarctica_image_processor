@@ -78,6 +78,8 @@ class image_processer:
             'flight' : '', 
             'cbd1' : '', 
             'cbd2' : '', 
+            'cbd1_fractional' : '',
+            'cbd2_fractional' : '',
             'num_additional_columns' : '0'
         }
 
