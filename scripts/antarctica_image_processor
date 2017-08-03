@@ -307,7 +307,6 @@ class image_processer:
             ########################################################################
             # check that the recognized text is sensible and interpret it
             ########################################################################
-            interpretation = self.ocr_reader._interpret_text(text_detections, try_image_orientation.shape, logger)
             try:
                 interpretation = self.ocr_reader._interpret_text(text_detections, try_image_orientation.shape, logger)
             except:

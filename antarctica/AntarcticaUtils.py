@@ -413,10 +413,14 @@ class BasicOCRReader:
 
         valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
         valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
-        assert(len(valid_cbd1) == 1) # only matching cbd allowed
-        assert(len(valid_cbd2) == 1) # only matching cbd allowed
+        if len(valid_cbd1) > 1:
+            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
+
+        if len(valid_cbd2) > 1:
+            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
+            
         valid_cbd1 = valid_cbd1[0]
-        valid_cbd2 = valid_cbd2[0]
+        valid_cbd2 = valid_cbd2[-1]
 
         cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
         cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
