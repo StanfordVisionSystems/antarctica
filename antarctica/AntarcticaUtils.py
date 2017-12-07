@@ -19,13 +19,13 @@ class BasicOCRReader:
 
         self.tool = pyocr.get_available_tools()[0]
         
-        with open('/home/jemmons/Research/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
+        with open('/home/jemmons/research/antarctica/antarctica/data/HOG_ocr_model.pkl', 'rb') as f:
             self.OCR_model = pickle.loads(f.read())
 
         numbers = ['0.png', '1.png', '2.png', '3.png', '4.png', '5.png', '6.png', '7.png', '8.png', '9.png']
         self.num_templates = []
         for number in numbers:
-            template = cv2.imread(os.path.join('/home/jemmons/Research/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
+            template = cv2.imread(os.path.join('/home/jemmons/research/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
             self.num_templates.append(template.astype(np.uint8))
         self.number_height = 50
         self.number_padding = 40
@@ -33,7 +33,7 @@ class BasicOCRReader:
         backwards_numbers = ['3.png', '4.png', '6.png', '7.png', '9.png']
         self.backwards_num_templates = []
         for number in backwards_numbers:
-            template = cv2.imread(os.path.join('/home/jemmons/Research/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
+            template = cv2.imread(os.path.join('/home/jemmons/research/antarctica/antarctica/data/', number), cv2.IMREAD_GRAYSCALE)
             template = cv2.flip(template, 1)
             self.backwards_num_templates.append(template.astype(np.uint8))
 
