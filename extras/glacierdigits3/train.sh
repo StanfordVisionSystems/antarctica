@@ -15,3 +15,5 @@ mv normproto glacierdigits3.normproto
 mv pffmtable glacierdigits3.pffmtable
 mv shapetable glacierdigits3.shapetable
 combine_tessdata glacierdigits3.
+
+# copy glacierdigits3.traindata to /usr/share/tesseract-ocr/tessdata/
