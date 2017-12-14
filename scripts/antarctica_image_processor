@@ -22,9 +22,9 @@ BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
 RESULTS_IMAGE_DIRNAME = 'stitched_images'
 
-assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
-CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now()),
-                     'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
+#assert(not git.Repo(search_parent_directories=True).is_dirty()) # GIT REPO IS DITRY!
+CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now())] #,
+#                     'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
 
 OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{horizontal_flip},{vertical_flip},{high_res_filename},{low_res_filename},{status},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{cbd1_fractional},{cbd2_fractional},{num_additional_columns}'
 
@@ -285,6 +285,7 @@ class image_processer:
                 try_image_orientation = cv2.flip(try_image_orientation, 1)
                 horizontal_flip = 'true'
                 
+            text_detections = self.ocr_reader.find_text(try_image_orientation, logger)
             try:
                 text_detections = self.ocr_reader.find_text(try_image_orientation, logger)
             except:
@@ -430,7 +431,8 @@ def main(args):
             batches.append(macro_batch[i:i+BATCH_SIZE])
 
         CSVrows = itertools.chain.from_iterable(
-            pool.map(image_processer(args.reel_num, args.output_dir), batches)
+            #pool.map(image_processer(args.reel_num, args.output_dir), batches)
+            map(image_processer(args.reel_num, args.output_dir), batches)
         )
         
         with open(args.output_csv, 'a') as f:
