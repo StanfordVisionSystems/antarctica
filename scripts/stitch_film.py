@@ -23,7 +23,7 @@ RESULTS_FILENAME = 'stitch.csv'
 RESULTS_IMAGE_DIRNAME = 'stitched_images'
 
 ZFILL_PADDING = 6
-OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{was_success},{error_message}'
+OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{width},{height},{was_success},{error_message}'
 OUTPUT_IMAGE_FILENAME_FORMAT = '{}_{}_{}-reel_begin_end.tiff'
 
 class image_processer:
@@ -94,6 +94,8 @@ class image_processer:
                     'reel_num' : self.reel_num,
                     'begin_image_num' : begin,
                     'end_image_num' : end,
+                    'width' : raster.shape[0],
+                    'height' : raster.shape[1],
                     'was_success' : 'False',
                     'error_message' : 'not_enough_input_images'
                     }))
@@ -118,6 +120,8 @@ class image_processer:
             'reel_num' : self.reel_num,
             'begin_image_num' : begin,
             'end_image_num' : end,
+            'width' : stitched_image.shape[0],
+            'height' : stitched_image.shape[1],
             'was_success' : 'True',
             'error_message' : ''
             })

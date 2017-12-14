@@ -96,8 +96,14 @@ class BasicOCRReader:
         top_line = (oriented_filmstrip[y11:y12, :] * (255 / 65535.0)).astype(np.uint8)
         bottom_line = (oriented_filmstrip[y21:y22, :] * (255 / 65535.0)).astype(np.uint8)
 
+        cv2.imwrite('/home/jemmons/roi1.png', top_line)
+        cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
+
         top_thres = cv2.adaptiveThreshold(top_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
         bottom_thres = cv2.adaptiveThreshold(bottom_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+
+        cv2.imwrite('/home/jemmons/roi1.png', top_thres)
+        cv2.imwrite('/home/jemmons/roi2.png', bottom_thres)
 
         top_yres = []
         bottom_yres = []
@@ -116,13 +122,13 @@ class BasicOCRReader:
         top_centerline = int(np.average(top_yres) + self.number_height/2)
         bottom_centerline = int(np.average(bottom_yres) + self.number_height/2)
 
-        '''
         top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
         bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
-        cv2.imwrite('/home/ubuntu/roi1.png', top_line)
-        cv2.imwrite('/home/ubuntu/roi2.png', bottom_line)
-        '''
+        cv2.imwrite('/home/jemmons/roi1.png', top_line)
+        cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
 
+        assert False
+        
         top_y1 = y11+top_centerline-self.number_padding
         top_y2 = y11+top_centerline+self.number_padding
         top_textline = oriented_filmstrip[top_y1:top_y2, :]
