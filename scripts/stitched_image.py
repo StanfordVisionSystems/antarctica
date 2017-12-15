@@ -8,7 +8,7 @@ from PIL import Image
 
 class StitchedImage:
 
-    OUTPUT_CSV_FORMAT = '{flip_x}, {flip_y}, {top_line}, {top_line_y}, {top_num_groups}, {bot_line}, {bot_line_y}, {bot_num_groups}'
+    OUTPUT_CSV_FORMAT = '{flip_x}, {flip_y}, {top_line}, {top_line_y}, {top_num_groups}, {bot_line}, {bot_line_y}, {bot_num_groups}\n'
     
     @staticmethod
     def get_base_mode():
@@ -116,17 +116,18 @@ class StitchedImage:
 
         # preform any necessary processing
         if self.mode['flip_x']:
-            self.image['image_original'] = self.image['image_original'].transpose(Image.FLIP_LEFT_RIGHT)
+            img = image.transpose(Image.FLIP_LEFT_RIGHT)
 
         if self.mode['flip_y']:
-            self.image['image_original'] = self.image['image_original'].transpose(Image.FLIP_TOP_BOTTOM)
-        
-        
+            image = image.transpose(Image.FLIP_TOP_BOTTOM)
         
         cv2.imwrite(self.image_path, image)
 
-        self.evict_image()
-         
+        with open(self.image_path+'.csv', 'w') as f:
+            f.write(StitchedImage.OUTPUT_CSV_FORMAT.format(**self.mode))
+        
+        #self.evict_image()
+
     def get_image(self):
 
         # ensure there isn't a prefetch worker still loading the image and ensure function call is thread safe

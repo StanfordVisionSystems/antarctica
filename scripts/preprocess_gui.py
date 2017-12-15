@@ -191,6 +191,7 @@ class GUI:
         return abs_coord_x, abs_coord_y
 
     def _forward(self):
+        self._images[self._img_idx].commit_to_disk()
         self._img_idx += 1
 
     def _backward(self):
@@ -248,11 +249,11 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Preprocessing GUI to make analysis easier.')
 
-    parser.add_argument('--output_dir',
-                        dest='output_dir',
-                        metavar='output_dir',
-                        type=str,
-                        help='the directory to output processed images and CSV results')
+    # parser.add_argument('--output_dir',
+    #                     dest='output_dir',
+    #                     metavar='output_dir',
+    #                     type=str,
+    #                     help='the directory to output processed images and CSV results')
 
     parser.add_argument('--scale_factor',
                         dest='scale_factor',
