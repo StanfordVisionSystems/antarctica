@@ -19,14 +19,17 @@ class GUI:
 
     def __init__(self, images, scale_factor):
 
-        pool = mp.Pool()
+        pool = mp.Pool(48)
         self._images = list(map(lambda x: stitched_image.StitchedImage(pool, x, scale_factor), images))
 
-        self.prefetch_amount = 10
-        self._images[0].prefetch_image()
-        for i in range(self.prefetch_amount):
-            self._images[i].prefetch_image()
+        #self.prefetch_amount = 10*48
+        #self._images[0].prefetch_image()
+        # for i in range(1, self.prefetch_amount):
+        #     self._images[i].prefetch_image()
 
+        for image in self._images:
+            image.prefetch_image()
+        
         self._img_idx = 0
         
         self._root = tk.Tk()
@@ -57,16 +60,14 @@ class GUI:
         self._prev_lines = []
         self._line_vals = []
         self._mode = {
-            'rotate_x' : False,
-            'rotate_y' : False,
+            'flip_x' : False,
+            'flip_y' : False,
             'top_line' : False,
             'top_line_y' : [],
-            'top_num_groups' : 3, 
+            'top_num_groups' : 0, 
             'bot_line' : False, 
             'bot_line_y' : [],
-            'bot_num_groups' : 2,             
-            'change' : False,
-            'type' : 0
+            'bot_num_groups' : 0,
         }
         self._load_image()
 
@@ -104,7 +105,7 @@ class GUI:
         self._counter += 1
 
         if(self._counter % num_lines == 0 and self._counter != 0):
-            self._commit()
+            self._log()
             self._forward()
             self._load_image()
             self._draw_prev_lines()
@@ -115,16 +116,30 @@ class GUI:
         self._counter = 0
 
         if event.char == '\r':
-            self._commit()
+            self._log()
+            self._load_image()
+            self._draw_prev_lines()
+            return 
+            
+        elif event.char == '6':
+            self._log()
             self._forward()
             self._load_image()
             self._draw_prev_lines()
             return 
             
+        elif event.char == '4':
+            self._log()
+            self._backward()
+            self._load_image()
+            self._draw_prev_lines()
+            return 
+
         elif event.char == 't':
             self._mode['top_line'] = not self._mode['top_line']
             if not self._mode['top_line']:
                 self._mode['top_line_y'] = []
+            self._log()
             self._load_image()
             return 
         
@@ -132,9 +147,25 @@ class GUI:
             self._mode['bot_line'] = not self._mode['bot_line']
             if not self._mode['bot_line']:
                 self._mode['bot_line_y'] = []
+            self._log()
             self._load_image()
             return 
         
+        elif event.char == 'x':
+            self._mode['flip_x'] = not self._mode['flip_x']
+            self._log()
+            img = self._images[self._img_idx].set_mode(**self._mode)
+
+            self._load_image()
+            return 
+            
+        elif event.char == 'y':
+            self._mode['flip_y'] = not self._mode['flip_y']
+            self._log()
+            img = self._images[self._img_idx].set_mode(**self._mode)
+            self._load_image()
+            return 
+
         print(json.dumps(self._mode, indent=4))
             
     def _loop(self):
@@ -163,7 +194,8 @@ class GUI:
         self._img_idx += 1
 
     def _backward(self):
-        self._img_idx += 1
+        if self._img_idx > 0:
+            self._img_idx -= 1
     
     def _load_image(self):
 
@@ -171,21 +203,28 @@ class GUI:
 
         t1 = timeit.default_timer()
 
-        img = self._images[self._img_idx].get_image()['image_uint8']
-        if self._img_idx > 0:
-            self._images[self._img_idx-1].evict_image()
+        img = self._images[self._img_idx].get_image()
+        self._images[self._img_idx].set_mode(**self._mode)
+        img = img['image_uint8']
+        # if self._img_idx > 24:
+        #     self._images[self._img_idx-24].evict_image()
 
         t2 = timeit.default_timer()
         print('image load time: {}'.format(t2-t1))
         
+        t1 = timeit.default_timer()
+
         self._photoImg = ImageTk.PhotoImage(img)
         self._canvas.create_image(0, 0, image=self._photoImg, anchor=tk.NW)
         self._w, self._h = img.size
         self._canvas.config(width=self._w, height=self._h)
 
         self._img_num += 1 
-        self._images[self._img_idx + self.prefetch_amount].prefetch_image()
+        #self._images[self._img_idx + self.prefetch_amount].prefetch_image()
         canvas_id = self._canvas.create_text((50,100), text='hello world {}'.format(self._img_num), anchor="nw")
+
+        t2 = timeit.default_timer()
+        print('page load time: {}'.format(t2-t1))
         print('READY')
         
     def _draw_prev_lines(self):
@@ -200,7 +239,7 @@ class GUI:
             self._prev_lines.append(self._canvas.create_line(0, y1, self._w, y1, width=2))
             self._prev_lines.append(self._canvas.create_line(0, y2, self._w, y2, width=2))
                 
-    def _commit(self):
+    def _log(self):
         print(json.dumps(self._mode, indent=4, sort_keys=True))
         
 def main(args):
