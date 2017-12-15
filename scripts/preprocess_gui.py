@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
+import cv2
 import numpy as np
+import multiprocessing as mp
 import json
 import threading
 import time
+import timeit
+
+import stitched_image
 
 import tkinter as tk
 from PIL import Image, ImageTk
@@ -12,7 +17,18 @@ from PIL import Image, ImageTk
 class GUI:
 
 
-    def __init__(self):
+    def __init__(self, images, scale_factor):
+
+        pool = mp.Pool()
+        self._images = list(map(lambda x: stitched_image.StitchedImage(pool, x, scale_factor), images))
+
+        self.prefetch_amount = 10
+        self._images[0].prefetch_image()
+        for i in range(self.prefetch_amount):
+            self._images[i].prefetch_image()
+
+        self._img_idx = 0
+        
         self._root = tk.Tk()
         self._canvas = tk.Canvas(self._root, width=0, height=0)
 
@@ -27,7 +43,8 @@ class GUI:
         self._root.bind("<Key>", lambda x: self._key(x))
         self._canvas.bind("<Button-1>", lambda x: self._click(x))
 
-        # kick off line drawing thread
+        # kick off line drawing thread 
+        self._start = False
         t = threading.Thread(target=self._loop)
         t.start()
 
@@ -53,6 +70,7 @@ class GUI:
         }
         self._load_image()
 
+        self._start = True
         self._root.mainloop()
         
     def _click(self, event):
@@ -82,11 +100,12 @@ class GUI:
             print('no lines set on image!')
             return
             
-        line = self._canvas.create_line(0, event.y, 1000, event.y)
+        line = self._canvas.create_line(0, event.y, self._w, event.y, width=2)
         self._counter += 1
 
         if(self._counter % num_lines == 0 and self._counter != 0):
             self._commit()
+            self._forward()
             self._load_image()
             self._draw_prev_lines()
             
@@ -97,6 +116,7 @@ class GUI:
 
         if event.char == '\r':
             self._commit()
+            self._forward()
             self._load_image()
             self._draw_prev_lines()
             return 
@@ -118,10 +138,15 @@ class GUI:
         print(json.dumps(self._mode, indent=4))
             
     def _loop(self):
-
+        
+        while True:
+            if self._start:
+                break
+            time.sleep(0.1)
+            
         while True:
             x, y = self._get_cursor_pos()
-            line = self._canvas.create_line(0, y, self._w, y)
+            line = self._canvas.create_line(0, y, self._w, y, width=2)
             time.sleep(0.05)
             self._canvas.delete(line)
 
@@ -134,36 +159,52 @@ class GUI:
 
         return abs_coord_x, abs_coord_y
 
+    def _forward(self):
+        self._img_idx += 1
+
+    def _backward(self):
+        self._img_idx += 1
+    
     def _load_image(self):
 
         self._canvas.delete('all')
 
-        img = Image.open("/home/jemmons/test.png")
+        t1 = timeit.default_timer()
+
+        img = self._images[self._img_idx].get_image()['image_uint8']
+        if self._img_idx > 0:
+            self._images[self._img_idx-1].evict_image()
+
+        t2 = timeit.default_timer()
+        print('image load time: {}'.format(t2-t1))
+        
         self._photoImg = ImageTk.PhotoImage(img)
         self._canvas.create_image(0, 0, image=self._photoImg, anchor=tk.NW)
         self._w, self._h = img.size
         self._canvas.config(width=self._w, height=self._h)
 
         self._img_num += 1 
+        self._images[self._img_idx + self.prefetch_amount].prefetch_image()
         canvas_id = self._canvas.create_text((50,100), text='hello world {}'.format(self._img_num), anchor="nw")
-
+        print('READY')
+        
     def _draw_prev_lines(self):
         
         if self._mode['top_line']:
             y1, y2 = self._mode['top_line_y']
-            self._prev_lines.append(self._canvas.create_line(0, y1, self._w, y1))
-            self._prev_lines.append(self._canvas.create_line(0, y2, self._w, y2))
+            self._prev_lines.append(self._canvas.create_line(0, y1, self._w, y1, width=2))
+            self._prev_lines.append(self._canvas.create_line(0, y2, self._w, y2, width=2))
 
         if self._mode['bot_line']:
             y1, y2 = self._mode['bot_line_y']
-            self._prev_lines.append(self._canvas.create_line(0, y1, self._w, y1))
-            self._prev_lines.append(self._canvas.create_line(0, y2, self._w, y2))
+            self._prev_lines.append(self._canvas.create_line(0, y1, self._w, y1, width=2))
+            self._prev_lines.append(self._canvas.create_line(0, y2, self._w, y2, width=2))
                 
     def _commit(self):
         print(json.dumps(self._mode, indent=4, sort_keys=True))
         
 def main(args):
-    GUI()
+    GUI(args.images, args.scale_factor)
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Preprocessing GUI to make analysis easier.')
@@ -173,6 +214,13 @@ if __name__ == '__main__':
                         metavar='output_dir',
                         type=str,
                         help='the directory to output processed images and CSV results')
+
+    parser.add_argument('--scale_factor',
+                        dest='scale_factor',
+                        metavar='scale_factor',
+                        type=float,
+                        help='the scaling factor to apply to the images',
+                        default=1)
 
     parser.add_argument(dest='images',
                         metavar='image',
