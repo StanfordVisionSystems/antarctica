@@ -17,10 +17,10 @@ from PIL import Image, ImageTk
 class GUI:
 
 
-    def __init__(self, images, scale_factor):
+    def __init__(self, images, scale_factor, output_dir):
 
         pool = mp.Pool(48)
-        self._images = list(map(lambda x: stitched_image.StitchedImage(pool, x, scale_factor), images))
+        self._images = list(map(lambda x: stitched_image.StitchedImage(pool, x, scale_factor, output_dir), images))
 
         #self.prefetch_amount = 10*48
         #self._images[0].prefetch_image()
@@ -124,6 +124,7 @@ class GUI:
         elif event.char == '6':
             self._log()
             self._forward()
+            self._images[self._img_idx].set_mode(**self._mode)
             self._load_image()
             self._draw_prev_lines()
             return 
@@ -140,6 +141,8 @@ class GUI:
             if not self._mode['top_line']:
                 self._mode['top_line_y'] = []
             self._log()
+            self._images[self._img_idx].set_mode(**self._mode)
+
             self._load_image()
             return 
         
@@ -148,13 +151,15 @@ class GUI:
             if not self._mode['bot_line']:
                 self._mode['bot_line_y'] = []
             self._log()
+            self._images[self._img_idx].set_mode(**self._mode)
+
             self._load_image()
             return 
         
         elif event.char == 'x':
             self._mode['flip_x'] = not self._mode['flip_x']
             self._log()
-            img = self._images[self._img_idx].set_mode(**self._mode)
+            self._images[self._img_idx].set_mode(**self._mode)
 
             self._load_image()
             return 
@@ -162,11 +167,20 @@ class GUI:
         elif event.char == 'y':
             self._mode['flip_y'] = not self._mode['flip_y']
             self._log()
-            img = self._images[self._img_idx].set_mode(**self._mode)
+            self._images[self._img_idx].set_mode(**self._mode)
             self._load_image()
             return 
 
-        print(json.dumps(self._mode, indent=4))
+        elif event.char == 'w':
+            print('commit all images to disk')
+            for i in range(len(self._images)):
+                if i % 25 == 0:
+                    print('processed {} of {}'.format(i, len(self._images)))
+
+                self._image[i].commit_to_disk()
+
+            print('done!')
+            return 
             
     def _loop(self):
         
@@ -191,8 +205,8 @@ class GUI:
         return abs_coord_x, abs_coord_y
 
     def _forward(self):
-        self._images[self._img_idx].commit_to_disk()
-        self._img_idx += 1
+        if self._img_idx < len(self.images):
+            self._img_idx += 1
 
     def _backward(self):
         if self._img_idx > 0:
@@ -220,9 +234,8 @@ class GUI:
         self._w, self._h = img.size
         self._canvas.config(width=self._w, height=self._h)
 
-        self._img_num += 1 
         #self._images[self._img_idx + self.prefetch_amount].prefetch_image()
-        canvas_id = self._canvas.create_text((50,100), text='hello world {}'.format(self._img_num), anchor="nw")
+        canvas_id = self._canvas.create_text((50,100), text='img_num: {} / {}'.format(self._img_num, len(self._images)-1), anchor="nw")
 
         t2 = timeit.default_timer()
         print('page load time: {}'.format(t2-t1))
@@ -249,18 +262,18 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Preprocessing GUI to make analysis easier.')
 
-    # parser.add_argument('--output_dir',
-    #                     dest='output_dir',
-    #                     metavar='output_dir',
-    #                     type=str,
-    #                     help='the directory to output processed images and CSV results')
+    parser.add_argument('--output_dir',
+                        dest='output_dir',
+                        metavar='output_dir',
+                        type=str,
+                        help='the directory to output processed images and CSV results')
 
     parser.add_argument('--scale_factor',
                         dest='scale_factor',
                         metavar='scale_factor',
                         type=float,
-                        help='the scaling factor to apply to the images',
-                        default=1)
+                        help='the scaling factor to apply to the images (1 / scale_factor is applied to x and y axes)',
+                        default=10)
 
     parser.add_argument(dest='images',
                         metavar='image',

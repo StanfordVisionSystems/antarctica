@@ -47,12 +47,13 @@ class StitchedImage:
             'image_uint8' : image_uint8
         }
 
-    def __init__(self, pool, image_path, scale_factor):
+    def __init__(self, pool, image_path, scale_factor, output_dir):
 
         self.pool = pool
         
         self.image_path = image_path
         self.scale_factor = scale_factor
+        self.output_dir = output_dir
         
         self.image = None
         self.image_future = None
@@ -121,9 +122,9 @@ class StitchedImage:
         if self.mode['flip_y']:
             image = image.transpose(Image.FLIP_TOP_BOTTOM)
         
-        cv2.imwrite(self.image_path, image)
+        cv2.imwrite(os.path.join(self.output_dir, self.image_path), image)
 
-        with open(self.image_path+'.csv', 'w') as f:
+        with open(os.path.join(self.output_dir, self.image_path+'.csv'), 'w') as f:
             f.write(StitchedImage.OUTPUT_CSV_FORMAT.format(**self.mode))
         
         #self.evict_image()
@@ -162,6 +163,7 @@ class StitchedImage:
         self.image_semaphore.release()
 
 if __name__ == '__main__':
+    # some basic testing code below
     import argparse
     import json
 
