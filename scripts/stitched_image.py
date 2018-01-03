@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import multiprocessing as mp
+import os
 import threading
 import timeit
 
@@ -121,10 +122,11 @@ class StitchedImage:
 
         if self.mode['flip_y']:
             image = image.transpose(Image.FLIP_TOP_BOTTOM)
-        
-        cv2.imwrite(os.path.join(self.output_dir, self.image_path), image)
 
-        with open(os.path.join(self.output_dir, self.image_path+'.csv'), 'w') as f:
+        image_basename = os.path.basename(self.image_path)
+        cv2.imwrite(os.path.join(self.output_dir, image_basename), image)
+
+        with open(os.path.join(self.output_dir, image_basename+'.csv'), 'w') as f:
             f.write(StitchedImage.OUTPUT_CSV_FORMAT.format(**self.mode))
         
         #self.evict_image()
@@ -133,7 +135,7 @@ class StitchedImage:
 
         # ensure there isn't a prefetch worker still loading the image and ensure function call is thread safe
         with self.image_semaphore: 
-            
+        
             # load if image isn't in memory yet
             if self.image is None:
                 self.image = StitchedImage._load_image(self.image_path, self.scale_factor)

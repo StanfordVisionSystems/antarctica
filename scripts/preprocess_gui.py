@@ -2,6 +2,7 @@
 
 import argparse
 import cv2
+import copy
 import numpy as np
 import multiprocessing as mp
 import json
@@ -21,7 +22,8 @@ class GUI:
 
         pool = mp.Pool(48)
         self._images = list(map(lambda x: stitched_image.StitchedImage(pool, x, scale_factor, output_dir), images))
-
+        self.output_dir = output_dir
+        
         #self.prefetch_amount = 10*48
         #self._images[0].prefetch_image()
         # for i in range(1, self.prefetch_amount):
@@ -40,7 +42,6 @@ class GUI:
         
         self._counter = 0
         self._photoImg = None
-        self._img_num = 0
         
         # set callbacks
         self._root.bind("<Key>", lambda x: self._key(x))
@@ -48,8 +49,8 @@ class GUI:
 
         # kick off line drawing thread 
         self._start = False
-        t = threading.Thread(target=self._loop)
-        t.start()
+        self._t = threading.Thread(target=self._loop)
+        self._t.start()
 
         # img = Image.open("/home/jemmons/test.png")
         # self._photoImg = ImageTk.PhotoImage(img)
@@ -119,12 +120,10 @@ class GUI:
             self._log()
             self._load_image()
             self._draw_prev_lines()
-            return 
             
         elif event.char == '6':
             self._log()
             self._forward()
-            self._images[self._img_idx].set_mode(**self._mode)
             self._load_image()
             self._draw_prev_lines()
             return 
@@ -134,7 +133,6 @@ class GUI:
             self._backward()
             self._load_image()
             self._draw_prev_lines()
-            return 
 
         elif event.char == 't':
             self._mode['top_line'] = not self._mode['top_line']
@@ -144,7 +142,6 @@ class GUI:
             self._images[self._img_idx].set_mode(**self._mode)
 
             self._load_image()
-            return 
         
         elif event.char == 'b':
             self._mode['bot_line'] = not self._mode['bot_line']
@@ -154,7 +151,6 @@ class GUI:
             self._images[self._img_idx].set_mode(**self._mode)
 
             self._load_image()
-            return 
         
         elif event.char == 'x':
             self._mode['flip_x'] = not self._mode['flip_x']
@@ -162,25 +158,28 @@ class GUI:
             self._images[self._img_idx].set_mode(**self._mode)
 
             self._load_image()
-            return 
             
         elif event.char == 'y':
             self._mode['flip_y'] = not self._mode['flip_y']
             self._log()
             self._images[self._img_idx].set_mode(**self._mode)
             self._load_image()
-            return 
 
         elif event.char == 'w':
-            print('commit all images to disk')
+            print('commit all images to disk: {}'.format(self.output_dir))
             for i in range(len(self._images)):
-                if i % 25 == 0:
+                if i % 10 == 0:
                     print('processed {} of {}'.format(i, len(self._images)))
 
-                self._image[i].commit_to_disk()
+                self._images[i].commit_to_disk()
 
             print('done!')
-            return 
+            
+        elif event.char == 'q':
+            print('quitting!')
+            self._root.quit()
+            
+        print(json.dumps(self._mode, indent=4, sort_keys=True))
             
     def _loop(self):
         
@@ -205,21 +204,22 @@ class GUI:
         return abs_coord_x, abs_coord_y
 
     def _forward(self):
-        if self._img_idx < len(self.images):
+        if self._img_idx < len(self._images)-1:
             self._img_idx += 1
+            self._images[self._img_idx].set_mode(**self._mode)
 
     def _backward(self):
         if self._img_idx > 0:
             self._img_idx -= 1
-    
+        self._mode = copy.deepcopy(self._images[self._img_idx].get_mode())
+            
     def _load_image(self):
 
         self._canvas.delete('all')
 
         t1 = timeit.default_timer()
-
         img = self._images[self._img_idx].get_image()
-        self._images[self._img_idx].set_mode(**self._mode)
+
         img = img['image_uint8']
         # if self._img_idx > 24:
         #     self._images[self._img_idx-24].evict_image()
@@ -235,7 +235,7 @@ class GUI:
         self._canvas.config(width=self._w, height=self._h)
 
         #self._images[self._img_idx + self.prefetch_amount].prefetch_image()
-        canvas_id = self._canvas.create_text((50,100), text='img_num: {} / {}'.format(self._img_num, len(self._images)-1), anchor="nw")
+        canvas_id = self._canvas.create_text((10,20), text='img_num: {} / {}'.format(self._img_idx, len(self._images)-1), anchor="nw")
 
         t2 = timeit.default_timer()
         print('page load time: {}'.format(t2-t1))
@@ -257,7 +257,7 @@ class GUI:
         print(json.dumps(self._mode, indent=4, sort_keys=True))
         
 def main(args):
-    GUI(args.images, args.scale_factor)
+    GUI(args.images, args.scale_factor, args.output_dir)
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Preprocessing GUI to make analysis easier.')
