@@ -41,10 +41,14 @@ class GUI:
         self._w = 0
         
         self._click_counter = 0
+        self._click_lines = []
         self.__photoImg = None # need to keep reference to image externally because tk doesn't!
         
         # set callbacks
-        self._root.bind("<Key>", lambda x: self._key(x))
+        self._root.bind("<Key>", lambda x: self._key(x.char))
+        self._root.bind('<Left>', lambda x: self._key('<Left>'))
+        self._root.bind('<Right>', lambda x: self._key('<Right>'))
+        
         self._canvas.bind("<Button-1>", lambda x: self._click(x))
 
         # kick off line drawing thread 
@@ -82,10 +86,13 @@ class GUI:
         num_lines = 2 if self._mode['top_line'] else 0
         num_lines += 2 if self._mode['bot_line'] else 0
 
-        if num_lines == 0 or self._click_counter % num_lines == 0:
+        if num_lines == 0 or (self._click_counter % num_lines) == 0:
             for line in self._prev_lines:
                 self._canvas.delete(line)
 
+            for line in self._click_lines:
+                self._canvas.delete(line)                
+                
             self._prev_lines = []
             self._mode['top_line_y'] = []
             self._mode['bot_line_y'] = []
@@ -108,24 +115,24 @@ class GUI:
             if self._click_counter == 0 or self._click_counter == 1:
                 self._mode['bot_line_y'].append(event.y)            
 
-        line = self._canvas.create_line(0, event.y, self._w, event.y, width=2)
+        self._click_lines.append(self._canvas.create_line(0, event.y, self._w, event.y, width=2))
         self._click_counter += 1
 
         if self._click_counter == num_lines:
             self._images[self._img_idx].set_mode(**self._mode)
             self._log()
             
-    def _key(self, event):
-        print("pressed", repr(event.char))
+    def _key(self, char):
+        print("pressed", repr(char))
 
         self._counter = 0
 
-        if event.char == '\r':
+        if char == '\r':
             self._load_image()
             self._draw_prev_lines()
             self._log()
             
-        elif event.char == '6':
+        elif char == '<Right>':
             num_lines = 2 if self._mode['top_line'] else 0
             num_lines += 2 if self._mode['bot_line'] else 0
             if self._click_counter != 0 and self._click_counter < num_lines:
@@ -137,7 +144,7 @@ class GUI:
             self._draw_prev_lines()
             self._log()
             
-        elif event.char == '4':
+        elif char == '<Left>':
             num_lines = 2 if self._mode['top_line'] else 0
             num_lines += 2 if self._mode['bot_line'] else 0
             if self._click_counter != 0 and self._click_counter < num_lines:
@@ -149,7 +156,7 @@ class GUI:
             self._draw_prev_lines()
             self._log()
 
-        elif event.char == 't':
+        elif char == 't':
             self._mode['top_line'] = not self._mode['top_line']
             if not self._mode['top_line']:
                 self._mode['top_line_y'] = []
@@ -159,7 +166,7 @@ class GUI:
             self._load_image()
             self._log()
         
-        elif event.char == 'b':
+        elif char == 'b':
             self._mode['bot_line'] = not self._mode['bot_line']
             if not self._mode['bot_line']:
                 self._mode['bot_line_y'] = []
@@ -170,7 +177,7 @@ class GUI:
             self._load_image()
             self._log()
             
-        elif event.char == 'x':
+        elif char == 'x':
             self._mode['flip_x'] = not self._mode['flip_x']
             self._log()
             self._images[self._img_idx].set_mode(**self._mode)
@@ -178,7 +185,7 @@ class GUI:
 
             self._load_image()
             
-        elif event.char == 'y':
+        elif char == 'y':
             self._mode['flip_y'] = not self._mode['flip_y']
             
             self._images[self._img_idx].set_mode(**self._mode)
@@ -187,7 +194,7 @@ class GUI:
             self._load_image()
             self._log()
 
-        elif event.char == 'w':
+        elif char == 'w':
             print('commit all images to disk: {}'.format(self.output_dir))
             futures = []
             for i in range(len(self._images)):
@@ -201,7 +208,7 @@ class GUI:
                 
             print('done!')
             
-        elif event.char == 'q':
+        elif char == 'q':
             print('quitting!')
             self._root.quit()
             

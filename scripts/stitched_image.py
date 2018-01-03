@@ -53,11 +53,11 @@ class StitchedImage:
 
         # preform any necessary processing
         if mode['flip_x']:
-            image = cv2.flip(image, 0)
+            image = cv2.flip(image, 1) # flip around the y-axis
             #image = image.transpose(Image.FLIP_LEFT_RIGHT)
 
         if mode['flip_y']:
-            image = cv2.flip(image, 1)
+            image = cv2.flip(image, 0) # flip around the x-axis
             #image = image.transpose(Image.FLIP_TOP_BOTTOM)
 
         cv2.imwrite(os.path.join(output_dir, image_basename), image)
@@ -66,11 +66,11 @@ class StitchedImage:
         # print(image_basename, mode)
         if mode['top_line']:
             assert mode['top_line_y'], 'top_line is true but no y-values'
-            mode['top_line_y'] = map(lambda x: scale_factor*x, mode['top_line_y'])                
+            mode['top_line_y'] = list(map(lambda x: scale_factor*x, mode['top_line_y']))
             
         if mode['bot_line']:
             assert mode['bot_line_y'], 'bot_line is true but no y-values'
-            mode['bot_line_y'] = map(lambda x: scale_factor*x, mode['bot_line_y'])                
+            mode['bot_line_y'] = list(map(lambda x: scale_factor*x, mode['bot_line_y']))
 
         # output the metadata in csv format
         with open(os.path.join(output_dir, image_basename+'.csv'), 'w') as f:
