@@ -48,6 +48,9 @@ class GUI:
         self._root.bind("<Key>", lambda x: self._key(x.char))
         self._root.bind('<Left>', lambda x: self._key('<Left>'))
         self._root.bind('<Right>', lambda x: self._key('<Right>'))
+        self._g_mode = False
+        self._t_mode = False
+        self._b_mode = False
         
         self._canvas.bind("<Button-1>", lambda x: self._click(x))
 
@@ -130,7 +133,56 @@ class GUI:
         if char == '\r':
             self._load_image()
             self._draw_prev_lines()
+            self._t_mode = False
+            self._b_mode = False
+            self._g_mode = False
+
             self._log()
+            
+        elif self._t_mode:
+            if char not in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']:
+                print('need to enter a digit')
+                return 
+
+            self._mode['top_num_groups'] = int(char)
+            self._images[self._img_idx].set_mode(**self._mode)
+            self._g_mode = False
+            self._t_mode = False
+            self._b_mode = False
+            print('t-mode off')
+            self._log()
+            
+        elif self._b_mode:
+            if char not in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']:
+                print('need to enter a digit')
+                return 
+
+            self._mode['bot_num_groups'] = int(char)
+            self._images[self._img_idx].set_mode(**self._mode)
+            self._g_mode = False
+            self._t_mode = False
+            self._b_mode = False
+            print('b-mode off')
+            self._log()
+            
+        elif self._g_mode and char == 't':
+            self._t_mode = True
+            self._b_mode = False
+            print('t-mode on')
+            
+        elif self._g_mode and char == 'b':
+            self._b_mode = True
+            self._t_mode = False             
+            print('b-mode on')
+                       
+        elif char == 'g':
+            self._g_mode = not self._g_mode
+            if not self._g_mode:
+                self._t_mode = False
+                self._b_mode = False
+                print('g-mode off')
+            else:
+                print('g-mode on')
             
         elif char == '<Right>':
             num_lines = 2 if self._mode['top_line'] else 0
@@ -142,6 +194,9 @@ class GUI:
             self._forward()
             self._load_image()
             self._draw_prev_lines()
+            self._t_mode = False
+            self._b_mode = False
+            self._g_mode = False
             self._log()
             
         elif char == '<Left>':
@@ -154,6 +209,9 @@ class GUI:
             self._backward()
             self._load_image()
             self._draw_prev_lines()
+            self._t_mode = False
+            self._b_mode = False
+            self._g_mode = False
             self._log()
 
         elif char == 't':
