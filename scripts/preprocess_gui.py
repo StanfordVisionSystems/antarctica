@@ -40,8 +40,8 @@ class GUI:
         self._h = 0
         self._w = 0
         
-        self._counter = 0
-        self._photoImg = None
+        self._click_counter = 0
+        self.__photoImg = None # need to keep reference to image externally because tk doesn't!
         
         # set callbacks
         self._root.bind("<Key>", lambda x: self._key(x))
@@ -78,38 +78,42 @@ class GUI:
     def _click(self, event):
         print(event.y)
 
-        for line in self._prev_lines:
-            self._canvas.delete(line)
-
-        if self._prev_lines:
-            self._prev_lines = []
-            self._mode['top_line_y'] = []
-            self._mode['bot_line_y'] = []
-        
+        # delete all lines from the image on click
         num_lines = 2 if self._mode['top_line'] else 0
         num_lines += 2 if self._mode['bot_line'] else 0
 
-        if self._mode['top_line']:
-            if self._counter < 2:
-                self._mode['top_line_y'].append(event.y)
-            elif self._mode['bot_line_y']:
-                self._mode['bot_line_y'].append(event.y)
-        else:
-            if self._mode['bot_line'] and self._counter < 2:
-                self._mode['bot_line_y'].append(event.y)
+        if num_lines == 0 or self._click_counter % num_lines == 0:
+            for line in self._prev_lines:
+                self._canvas.delete(line)
 
+            self._prev_lines = []
+            self._mode['top_line_y'] = []
+            self._mode['bot_line_y'] = []
+            self._click_counter = 0
+            
         if(num_lines == 0):
             print('no lines set on image!')
             return
-            
-        line = self._canvas.create_line(0, event.y, self._w, event.y, width=2)
-        self._counter += 1
 
-        if(self._counter % num_lines == 0 and self._counter != 0):
+        # update the mode according to the clicks
+        if self._mode['top_line']:
+            if self._click_counter == 0 or self._click_counter == 1:
+                self._mode['top_line_y'].append(event.y)
+
+            elif self._click_counter == 2 or self._click_counter == 3:
+                assert self._mode['bot_line']
+                self._mode['bot_line_y'].append(event.y)
+
+        elif self._mode['bot_line']:
+            if self._click_counter == 0 or self._click_counter == 1:
+                self._mode['bot_line_y'].append(event.y)            
+
+        line = self._canvas.create_line(0, event.y, self._w, event.y, width=2)
+        self._click_counter += 1
+
+        if self._click_counter == num_lines:
+            self._images[self._img_idx].set_mode(**self._mode)
             self._log()
-            self._forward()
-            self._load_image()
-            self._draw_prev_lines()
             
     def _key(self, event):
         print("pressed", repr(event.char))
@@ -117,70 +121,90 @@ class GUI:
         self._counter = 0
 
         if event.char == '\r':
-            self._log()
             self._load_image()
             self._draw_prev_lines()
+            self._log()
             
         elif event.char == '6':
-            self._log()
+            num_lines = 2 if self._mode['top_line'] else 0
+            num_lines += 2 if self._mode['bot_line'] else 0
+            if self._click_counter != 0 and self._click_counter < num_lines:
+                print('need to finish clicking lines before you continue: {} of {}'.format(self._click_counter, num_lines))
+                return
+            
             self._forward()
             self._load_image()
             self._draw_prev_lines()
-            return 
+            self._log()
             
         elif event.char == '4':
-            self._log()
+            num_lines = 2 if self._mode['top_line'] else 0
+            num_lines += 2 if self._mode['bot_line'] else 0
+            if self._click_counter != 0 and self._click_counter < num_lines:
+                print('need to finish clicking lines before you continue: {} of {}'.format(self._click_counter, num_lines))
+                return
+
             self._backward()
             self._load_image()
             self._draw_prev_lines()
+            self._log()
 
         elif event.char == 't':
             self._mode['top_line'] = not self._mode['top_line']
             if not self._mode['top_line']:
                 self._mode['top_line_y'] = []
-            self._log()
             self._images[self._img_idx].set_mode(**self._mode)
+            self._click_counter = 0 
 
             self._load_image()
+            self._log()
         
         elif event.char == 'b':
             self._mode['bot_line'] = not self._mode['bot_line']
             if not self._mode['bot_line']:
                 self._mode['bot_line_y'] = []
-            self._log()
+
             self._images[self._img_idx].set_mode(**self._mode)
+            self._click_counter = 0 
 
             self._load_image()
-        
+            self._log()
+            
         elif event.char == 'x':
             self._mode['flip_x'] = not self._mode['flip_x']
             self._log()
             self._images[self._img_idx].set_mode(**self._mode)
+            self._click_counter = 0 
 
             self._load_image()
             
         elif event.char == 'y':
             self._mode['flip_y'] = not self._mode['flip_y']
-            self._log()
+            
             self._images[self._img_idx].set_mode(**self._mode)
+            self._click_counter = 0 
+
             self._load_image()
+            self._log()
 
         elif event.char == 'w':
             print('commit all images to disk: {}'.format(self.output_dir))
+            futures = []
             for i in range(len(self._images)):
+                f = self._images[i].commit_to_disk()
+                futures.append(f)
+
+            for i in range(len(futures)):
                 if i % 10 == 0:
-                    print('processed {} of {}'.format(i, len(self._images)))
-
-                self._images[i].commit_to_disk()
-
+                    print('processed {} of {}'.format(i, len(self._images)))                    
+                futures[i].get()
+                
             print('done!')
             
         elif event.char == 'q':
             print('quitting!')
             self._root.quit()
-            
-        print(json.dumps(self._mode, indent=4, sort_keys=True))
-            
+                        
     def _loop(self):
         
         while True:
@@ -208,10 +232,14 @@ class GUI:
             self._img_idx += 1
             self._images[self._img_idx].set_mode(**self._mode)
 
+        self._click_counter = 0 
+            
     def _backward(self):
         if self._img_idx > 0:
             self._img_idx -= 1
+
         self._mode = copy.deepcopy(self._images[self._img_idx].get_mode())
+        self._click_counter = 0 
             
     def _load_image(self):
 
@@ -225,12 +253,12 @@ class GUI:
         #     self._images[self._img_idx-24].evict_image()
 
         t2 = timeit.default_timer()
-        print('image load time: {}'.format(t2-t1))
+        # print('image load time: {}'.format(t2-t1))
         
         t1 = timeit.default_timer()
 
-        self._photoImg = ImageTk.PhotoImage(img)
-        self._canvas.create_image(0, 0, image=self._photoImg, anchor=tk.NW)
+        self.__photoImg = ImageTk.PhotoImage(img)
+        self._canvas.create_image(0, 0, image=self.__photoImg, anchor=tk.NW)
         self._w, self._h = img.size
         self._canvas.config(width=self._w, height=self._h)
 
@@ -238,8 +266,8 @@ class GUI:
         canvas_id = self._canvas.create_text((10,20), text='img_num: {} / {}'.format(self._img_idx, len(self._images)-1), anchor="nw")
 
         t2 = timeit.default_timer()
-        print('page load time: {}'.format(t2-t1))
-        print('READY')
+        # print('page load time: {}'.format(t2-t1))
+        # print('READY')
         
     def _draw_prev_lines(self):
         
@@ -254,6 +282,8 @@ class GUI:
             self._prev_lines.append(self._canvas.create_line(0, y2, self._w, y2, width=2))
                 
     def _log(self):
+        print('\033[2J') # clear terminal char
+        print('image number {} of {}'.format(self._img_idx, len(self._images)))
         print(json.dumps(self._mode, indent=4, sort_keys=True))
         
 def main(args):

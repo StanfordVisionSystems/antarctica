@@ -48,6 +48,31 @@ class StitchedImage:
             'image_uint8' : image_uint8
         }
 
+    @staticmethod
+    def _commit_to_disk(image, image_basename, output_dir, scale_factor, mode):
+        # preform any necessary processing
+        if mode['flip_x']:
+            img = image.transpose(Image.FLIP_LEFT_RIGHT)
+
+        if mode['flip_y']:
+            image = image.transpose(Image.FLIP_TOP_BOTTOM)
+
+        cv2.imwrite(os.path.join(output_dir, image_basename), image)
+
+        # multiple by the scale factor
+        print(image_basename, mode)
+        if mode['top_line']:
+            assert mode['top_line_y'], 'top_line is true but no y-values'
+            mode['top_line_y'] = map(lambda x: scale_factor*x, mode['top_line_y'])                
+            
+        if mode['bot_line']:
+            assert mode['bot_line_y'], 'bot_line is true but no y-values'
+            mode['bot_line_y'] = map(lambda x: scale_factor*x, mode['bot_line_y'])                
+
+        # output the metadata in csv format
+        with open(os.path.join(output_dir, image_basename+'.csv'), 'w') as f:
+            f.write(StitchedImage.OUTPUT_CSV_FORMAT.format(**mode))
+        
     def __init__(self, pool, image_path, scale_factor, output_dir):
 
         self.pool = pool
@@ -116,20 +141,10 @@ class StitchedImage:
         image = self.get_image()
         image = image['image_original']
 
-        # preform any necessary processing
-        if self.mode['flip_x']:
-            img = image.transpose(Image.FLIP_LEFT_RIGHT)
-
-        if self.mode['flip_y']:
-            image = image.transpose(Image.FLIP_TOP_BOTTOM)
-
         image_basename = os.path.basename(self.image_path)
-        cv2.imwrite(os.path.join(self.output_dir, image_basename), image)
 
-        with open(os.path.join(self.output_dir, image_basename+'.csv'), 'w') as f:
-            f.write(StitchedImage.OUTPUT_CSV_FORMAT.format(**self.mode))
-        
-        #self.evict_image()
+        future = self.pool.apply_async(StitchedImage._commit_to_disk, args=(image, image_basename, self.output_dir, self.scale_factor, self.mode))
+        return future
 
     def get_image(self):
 
