@@ -76,7 +76,7 @@ class image_processer:
 
         logger.debug('Loaded images')
                 
-        print(image_data['nums'])
+        #print(image_data['nums'])
         # check the size of the batch
         if len(image_data['rasters']) != BATCH_SIZE:
             logger.warning('Recieved {} frames when {} were expected. Skipping batch!'.format(len(images), BATCH_SIZE))
