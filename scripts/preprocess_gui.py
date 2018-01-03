@@ -49,7 +49,7 @@ class GUI:
 
         # kick off line drawing thread 
         self._start = False
-        self._t = threading.Thread(target=self._loop)
+        self._t = threading.Thread(target=self._loop, daemon=True)
         self._t.start()
 
         # img = Image.open("/home/jemmons/test.png")
@@ -204,7 +204,7 @@ class GUI:
         elif event.char == 'q':
             print('quitting!')
             self._root.quit()
-                        
+            
     def _loop(self):
         
         while True:

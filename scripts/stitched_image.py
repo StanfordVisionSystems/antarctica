@@ -50,17 +50,20 @@ class StitchedImage:
 
     @staticmethod
     def _commit_to_disk(image, image_basename, output_dir, scale_factor, mode):
+
         # preform any necessary processing
         if mode['flip_x']:
-            img = image.transpose(Image.FLIP_LEFT_RIGHT)
+            image = cv2.flip(image, 0)
+            #image = image.transpose(Image.FLIP_LEFT_RIGHT)
 
         if mode['flip_y']:
-            image = image.transpose(Image.FLIP_TOP_BOTTOM)
+            image = cv2.flip(image, 1)
+            #image = image.transpose(Image.FLIP_TOP_BOTTOM)
 
         cv2.imwrite(os.path.join(output_dir, image_basename), image)
 
         # multiple by the scale factor
-        print(image_basename, mode)
+        # print(image_basename, mode)
         if mode['top_line']:
             assert mode['top_line_y'], 'top_line is true but no y-values'
             mode['top_line_y'] = map(lambda x: scale_factor*x, mode['top_line_y'])                
