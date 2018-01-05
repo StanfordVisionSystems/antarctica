@@ -180,8 +180,9 @@ class StitchedImage:
     def _finalize_image_prefetch(self, future):
 
         self.image = future
+        #print('finished prefetching! {}'.format(self.image_path))
         self.image_semaphore.release()
-
+        
 if __name__ == '__main__':
     # some basic testing code below
     import argparse

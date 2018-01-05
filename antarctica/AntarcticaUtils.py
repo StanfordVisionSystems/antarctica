@@ -84,80 +84,93 @@ class BasicOCRReader:
                 
         return filmstrip
     
-    def find_text(self, oriented_filmstrip, logger):
+    def find_text(self, oriented_filmstrip, preprocessing_metadata, logger):
 
         h, w = oriented_filmstrip.shape
        
-        y11 = int(0)
-        y12 = int(0.25*h)
-        y21 = int(0.65*h)
-        y22 = int(h)
+        # y11 = int(0)
+        # y12 = int(0.25*h)
+        # y21 = int(0.65*h)
+        # y22 = int(h)
 
-        top_line = (oriented_filmstrip[y11:y12, :] * (255 / 65535.0)).astype(np.uint8)
-        bottom_line = (oriented_filmstrip[y21:y22, :] * (255 / 65535.0)).astype(np.uint8)
+        # top_line = (oriented_filmstrip[y11:y12, :] * (255 / 65535.0)).astype(np.uint8)
+        # bottom_line = (oriented_filmstrip[y21:y22, :] * (255 / 65535.0)).astype(np.uint8)
 
-        cv2.imwrite('/home/jemmons/roi1.png', top_line)
-        cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
+        # cv2.imwrite('/home/jemmons/roi1.png', top_line)
+        # cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
 
-        top_thres = cv2.adaptiveThreshold(top_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
-        bottom_thres = cv2.adaptiveThreshold(bottom_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+        # top_thres = cv2.adaptiveThreshold(top_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
+        # bottom_thres = cv2.adaptiveThreshold(bottom_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
 
-        cv2.imwrite('/home/jemmons/roi1.png', top_thres)
-        cv2.imwrite('/home/jemmons/roi2.png', bottom_thres)
+        # cv2.imwrite('/home/jemmons/roi1.png', top_thres)
+        # cv2.imwrite('/home/jemmons/roi2.png', bottom_thres)
 
-        top_yres = []
-        bottom_yres = []
-        for template in self.num_templates:
-            top_res = cv2.matchTemplate(top_thres, template, cv2.TM_CCOEFF_NORMED)
-            top_y, top_x = np.where(top_res >= 0.8)
-            if top_y.any():
-                top_yres.append(np.median(top_y))
+        # top_yres = []
+        # bottom_yres = []
+        # for template in self.num_templates:
+        #     top_res = cv2.matchTemplate(top_thres, template, cv2.TM_CCOEFF_NORMED)
+        #     top_y, top_x = np.where(top_res >= 0.8)
+        #     if top_y.any():
+        #         top_yres.append(np.median(top_y))
             
-            bottom_res = cv2.matchTemplate(bottom_thres, template, cv2.TM_CCOEFF_NORMED)
-            bottom_y, bottom_x = np.where(bottom_res >= 0.8)
-            if bottom_y.any():
-                bottom_yres.append(np.median(bottom_y))
-            # TODO(jremmons) add a check so that uncertainty in the number position is considered
+        #     bottom_res = cv2.matchTemplate(bottom_thres, template, cv2.TM_CCOEFF_NORMED)
+        #     bottom_y, bottom_x = np.where(bottom_res >= 0.8)
+        #     if bottom_y.any():
+        #         bottom_yres.append(np.median(bottom_y))
+        #     # TODO(jremmons) add a check so that uncertainty in the number position is considered
                 
-        top_centerline = int(np.average(top_yres) + self.number_height/2)
-        bottom_centerline = int(np.average(bottom_yres) + self.number_height/2)
+        # top_centerline = int(np.average(top_yres) + self.number_height/2)
+        # bottom_centerline = int(np.average(bottom_yres) + self.number_height/2)
 
-        top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
-        bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
-        cv2.imwrite('/home/jemmons/roi1.png', top_line)
-        cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
+        # top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
+        # bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
+        # cv2.imwrite('/home/jemmons/roi1.png', top_line)
+        # cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
 
-        assert False
+        # assert False
         
-        top_y1 = y11+top_centerline-self.number_padding
-        top_y2 = y11+top_centerline+self.number_padding
-        top_textline = oriented_filmstrip[top_y1:top_y2, :]
+        # top_y1 = y11+top_centerline-self.number_padding
+        # top_y2 = y11+top_centerline+self.number_padding
+        # top_textline = oriented_filmstrip[top_y1:top_y2, :]
 
-        bottom_y1 = y21+bottom_centerline-self.number_padding
-        bottom_y2 = y21+bottom_centerline+self.number_padding
-        bottom_textline = oriented_filmstrip[bottom_y1:bottom_y2, :]
-
-        top_detections = self._recognize_text(top_textline, logger)
-        bottom_detections = self._recognize_text(bottom_textline, logger)
+        # bottom_y1 = y21+bottom_centerline-self.number_padding
+        # bottom_y2 = y21+bottom_centerline+self.number_padding
+        # bottom_textline = oriented_filmstrip[bottom_y1:bottom_y2, :]
 
         top_detections_final = []
-        for d in top_detections:
-            d['xmin'] = str(d['x1'])
-            d['xmax'] = str(d['x2'])
-            d['ymin'] = str(d['y1'] + top_y1 )
-            d['ymax'] = str(d['y2'] + top_y1)
-            d['recognition_type'] = 'number_char'
-            top_detections_final.append(d)
+        if preprocessing_metadata['top_line']:
+            ymin, ymax = preprocessing_metadata['top_line_y']
+            ymin = int(ymin)
+            ymax = int(ymax)
+            
+            top_textline = oriented_filmstrip[ymin:ymax,:]
+            top_detections = self._recognize_text(top_textline, logger)
+
+            for d in top_detections:
+                d['xmin'] = str(d['x1'])
+                d['xmax'] = str(d['x2'])
+                d['ymin'] = str(d['y1'] + ymin)
+                d['ymax'] = str(d['y2'] + ymin)
+                d['recognition_type'] = 'number_char'
+                top_detections_final.append(d)
 
         bottom_detections_final = []
-        for d in bottom_detections:
-            d['xmin'] = str(d['x1'])
-            d['xmax'] = str(d['x2'])
-            d['ymin'] = str(d['y1'] + bottom_y1)
-            d['ymax'] = str(d['y2'] + bottom_y1)
-            d['recognition_type'] = 'number_char'
-            bottom_detections_final.append(d)
-        
+        if preprocessing_metadata['bot_line']:
+            ymin, ymax = preprocessing_metadata['bot_line_y']
+            ymin = int(ymin)
+            ymax = int(ymax)
+
+            bot_textline = oriented_filmstrip[ymin:ymax,:]
+            bottom_detections = self._recognize_text(bottom_textline, logger)
+
+            for d in bottom_detections:
+                d['xmin'] = str(d['x1'])
+                d['xmax'] = str(d['x2'])
+                d['ymin'] = str(d['y1'] + ymin)
+                d['ymax'] = str(d['y2'] + ymin)
+                d['recognition_type'] = 'number_char'
+                bottom_detections_final.append(d)
+
         return top_detections_final, bottom_detections_final
 
     @staticmethod
@@ -614,36 +627,29 @@ class BasicOCRReader:
                 char_height = char_y2 - char_y1
                 char_length = char_x2 - char_x1
                 
-                if(char_length < 10 or char_length > 50 or
-                   char_height < 10 or char_height > 100):
-                    logger.debug('invalid char dims; skipping!')
-                    continue
+                # if(char_length < 10 or char_length > 50 or
+                #    char_height < 10 or char_height > 100):
+                #     logger.debug('invalid char dims; skipping! (I thought it might be: {})'.format(box.content))
+                #     continue
                 
                 hog_recognition = self._hog_OCR(segment[char_y1:char_y2, char_x1:char_x2].astype(np.uint8), logger)
                 if(box.content != hog_recognition):
-                    #logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
+                    logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
 
-                    if(box.content in ['0', '8'] and
-                       hog_recognition in ['0', '8']):
+                    if(box.content in ['0', '8'] and hog_recognition in ['0', '8']):
                         box.content = hog_recognition
                         
-                    if(box.content in ['1', '7'] and
-                       hog_recognition in ['1', '7']):
+                    if(box.content in ['1', '7'] and hog_recognition in ['1', '7']):
                         box.content = hog_recognition
-
-                '''
-                #logger.debug('add rectangles around the characters')
-                #textline = cv2.rectangle(textline.copy(), (x1+char_x1, char_y1), (x1+char_x2, char_y2), (0,0,0))
-                '''
                 
+
                 text = '?'
-                if not box.content.isspace():
-                    assert(len(box.content) == 1)
+                if box.content in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
                     text = box.content
 
-                '''
-                #textline = cv2.putText(textline.copy(), text, (x1+char_x1+20, char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
-                '''
+                logger.debug('add rectangles around the characters')
+                textline = cv2.rectangle(textline.copy(), (x1+char_x1, char_y1), (x1+char_x2, char_y2), (0,0,0))                
+                textline = cv2.putText(textline.copy(), text, (x1+char_x1+20, char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
 
                 detection = {'char' : text,
                              'x1' : x1+char_x1,
@@ -655,6 +661,7 @@ class BasicOCRReader:
                 text_detections.append(detection)
             segment_number += 1
                 
+        cv2.imwrite('/home/jemmons/roi1.png', textline)
         return text_detections
         
 class BasicFilmstripStitcher:
