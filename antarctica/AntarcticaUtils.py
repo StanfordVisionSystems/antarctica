@@ -87,63 +87,19 @@ class BasicOCRReader:
     def find_text(self, oriented_filmstrip, preprocessing_metadata, logger):
 
         h, w = oriented_filmstrip.shape
-       
-        # y11 = int(0)
-        # y12 = int(0.25*h)
-        # y21 = int(0.65*h)
-        # y22 = int(h)
-
-        # top_line = (oriented_filmstrip[y11:y12, :] * (255 / 65535.0)).astype(np.uint8)
-        # bottom_line = (oriented_filmstrip[y21:y22, :] * (255 / 65535.0)).astype(np.uint8)
-
-        # cv2.imwrite('/home/jemmons/roi1.png', top_line)
-        # cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
-
-        # top_thres = cv2.adaptiveThreshold(top_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
-        # bottom_thres = cv2.adaptiveThreshold(bottom_line, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 51, 15)
-
-        # cv2.imwrite('/home/jemmons/roi1.png', top_thres)
-        # cv2.imwrite('/home/jemmons/roi2.png', bottom_thres)
-
-        # top_yres = []
-        # bottom_yres = []
-        # for template in self.num_templates:
-        #     top_res = cv2.matchTemplate(top_thres, template, cv2.TM_CCOEFF_NORMED)
-        #     top_y, top_x = np.where(top_res >= 0.8)
-        #     if top_y.any():
-        #         top_yres.append(np.median(top_y))
-            
-        #     bottom_res = cv2.matchTemplate(bottom_thres, template, cv2.TM_CCOEFF_NORMED)
-        #     bottom_y, bottom_x = np.where(bottom_res >= 0.8)
-        #     if bottom_y.any():
-        #         bottom_yres.append(np.median(bottom_y))
-        #     # TODO(jremmons) add a check so that uncertainty in the number position is considered
-                
-        # top_centerline = int(np.average(top_yres) + self.number_height/2)
-        # bottom_centerline = int(np.average(bottom_yres) + self.number_height/2)
-
-        # top_line = cv2.rectangle(top_line.copy(), (0, top_centerline-self.number_padding), (w, top_centerline+self.number_padding), (0,0,0), thickness=5)
-        # bottom_line = cv2.rectangle(bottom_line.copy(), (0, bottom_centerline-self.number_padding), (w, bottom_centerline+self.number_padding), (0,0,0), thickness=5)
-        # cv2.imwrite('/home/jemmons/roi1.png', top_line)
-        # cv2.imwrite('/home/jemmons/roi2.png', bottom_line)
-
-        # assert False
+        w_trunc = min(w, 32767)
         
-        # top_y1 = y11+top_centerline-self.number_padding
-        # top_y2 = y11+top_centerline+self.number_padding
-        # top_textline = oriented_filmstrip[top_y1:top_y2, :]
-
-        # bottom_y1 = y21+bottom_centerline-self.number_padding
-        # bottom_y2 = y21+bottom_centerline+self.number_padding
-        # bottom_textline = oriented_filmstrip[bottom_y1:bottom_y2, :]
-
+        # TODO(jremmons) rescale the height of the roi to be less than 32767 (maxval of  int16)
+        
         top_detections_final = []
         if preprocessing_metadata['top_line']:
             ymin, ymax = preprocessing_metadata['top_line_y']
             ymin = int(ymin)
             ymax = int(ymax)
             
-            top_textline = oriented_filmstrip[ymin:ymax,:]
+            top_textline = oriented_filmstrip[ymin:ymax,:w_trunc]
+            #top_textline = (top_textline * (255 / 65535.0)).astype(np.uint8)
+            #_, top_textline = cv2.threshold(top_textline, 50, 255, cv2.THRESH_BINARY)
             top_detections = self._recognize_text(top_textline, logger)
 
             for d in top_detections:
@@ -160,7 +116,9 @@ class BasicOCRReader:
             ymin = int(ymin)
             ymax = int(ymax)
 
-            bot_textline = oriented_filmstrip[ymin:ymax,:]
+            bottom_textline = oriented_filmstrip[ymin:ymax,:w_trunc]
+            # bottom_textline = (bottom_textline * (255 / 65535.0)).astype(np.uint8)
+            # _, bottom_textline = cv2.threshold(bottom_textline, 50, 255, cv2.THRESH_BINARY)
             bottom_detections = self._recognize_text(bottom_textline, logger)
 
             for d in bottom_detections:
@@ -611,7 +569,7 @@ class BasicOCRReader:
 
             char_boxes = self.tool.image_to_string(
                 Image.fromarray(segment),
-                lang='glacierdigits3',
+                lang='glacierdigits7',
                 builder=pyocr.tesseract.CharBoxBuilder()
             )
 
@@ -627,10 +585,9 @@ class BasicOCRReader:
                 char_height = char_y2 - char_y1
                 char_length = char_x2 - char_x1
                 
-                # if(char_length < 10 or char_length > 50 or
-                #    char_height < 10 or char_height > 100):
-                #     logger.debug('invalid char dims; skipping! (I thought it might be: {})'.format(box.content))
-                #     continue
+                if char_length < 10 or char_height < 20:
+                    logger.debug('invalid char dims; skipping! (I thought it might be: {})'.format(box.content))
+                    continue
                 
                 hog_recognition = self._hog_OCR(segment[char_y1:char_y2, char_x1:char_x2].astype(np.uint8), logger)
                 if(box.content != hog_recognition):
@@ -660,8 +617,27 @@ class BasicOCRReader:
 
                 text_detections.append(detection)
             segment_number += 1
+            
+        import uuid
+        last_segment = 0
+        xmin = w
+        xmax = 0
+        #print(len(text_detections))
+        #cv2.imwrite('/home/jemmons/tmp/{}.tiff'.format(str(uuid.uuid4())), textline)
+
+        for detection in text_detections:
+            print(detection)
+            if last_segment != detection['segment']:
+                last_segment = detection['segment']
+                cv2.imwrite('/home/jemmons/tmp/{}.tiff'.format(str(uuid.uuid4())), textline[:, max(xmin-50,0):min(w,xmax+50)])
+                xmin = w
+                xmax = 0
                 
-        cv2.imwrite('/home/jemmons/roi1.png', textline)
+            if detection['x1'] < xmin:
+                xmin = detection['x1']
+            if detection['x2'] > xmax:
+                xmax = detection['x2']
+                            
         return text_detections
         
 class BasicFilmstripStitcher:

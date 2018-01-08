@@ -201,7 +201,8 @@ class image_processer:
                       'raster' : None}
             
         try:
-            image_reel, image_min, image_max = self.get_filename_num(image_path)
+            image_path_basename = os.path.basename(image_path)
+            image_reel, image_min, image_max = self.get_filename_num(image_path_basename)
         except:
             logger.error('input filename is malformed; could not parse image number')
             return self.noop(images, image_processer.COULD_NOT_PARSE_IMAGE_FILENAME)
@@ -256,7 +257,7 @@ class image_processer:
             logger.warning('Could not find text on the stitched film strip. Skipping batch!')
             return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
 
-        print(text_detections)
+        #print(text_detections)
         
         logger.debug('Finished detecting text in the image')        
         return
@@ -379,8 +380,8 @@ def main(args):
             batches.append(macro_batch[i])
 
         CSVrows = itertools.chain.from_iterable(
-            #pool.map(image_processer(args.reel_num, args.output_dir), batches)
-            map(image_processer(args.reel_num, args.output_dir), batches)
+            pool.map(image_processer(args.reel_num, args.output_dir), batches)
+            #map(image_processer(args.reel_num, args.output_dir), batches)
         )
         
         with open(args.output_csv, 'a') as f:
