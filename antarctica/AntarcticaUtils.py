@@ -9,6 +9,7 @@ import scipy.ndimage
 
 from skimage.feature import hog
 from sklearn.svm import LinearSVC
+from sklearn.cluster import KMeans
 from matplotlib import pyplot as plt
 from PIL import Image
 
@@ -88,6 +89,7 @@ class BasicOCRReader:
 
         h, w = oriented_filmstrip.shape
         w_trunc = min(w, 32767)
+        assert w < 2*32767
         
         # TODO(jremmons) rescale the height of the roi to be less than 32767 (maxval of  int16)
         
@@ -96,10 +98,8 @@ class BasicOCRReader:
             ymin, ymax = preprocessing_metadata['top_line_y']
             ymin = int(ymin)
             ymax = int(ymax)
-            
+
             top_textline = oriented_filmstrip[ymin:ymax,:w_trunc]
-            #top_textline = (top_textline * (255 / 65535.0)).astype(np.uint8)
-            #_, top_textline = cv2.threshold(top_textline, 50, 255, cv2.THRESH_BINARY)
             top_detections = self._recognize_text(top_textline, logger)
 
             for d in top_detections:
@@ -110,6 +110,18 @@ class BasicOCRReader:
                 d['recognition_type'] = 'number_char'
                 top_detections_final.append(d)
 
+            if w > w_trunc:
+                top_textline = oriented_filmstrip[ymin:ymax,w_trunc:]
+                top_detections = self._recognize_text(top_textline, logger)
+                
+                for d in top_detections:
+                    d['xmin'] = str(d['x1'] + w_trunc)
+                    d['xmax'] = str(d['x2'] + w_trunc)
+                    d['ymin'] = str(d['y1'] + ymin)
+                    d['ymax'] = str(d['y2'] + ymin)
+                    d['recognition_type'] = 'number_char'
+                    top_detections_final.append(d)
+
         bottom_detections_final = []
         if preprocessing_metadata['bot_line']:
             ymin, ymax = preprocessing_metadata['bot_line_y']
@@ -117,8 +129,6 @@ class BasicOCRReader:
             ymax = int(ymax)
 
             bottom_textline = oriented_filmstrip[ymin:ymax,:w_trunc]
-            # bottom_textline = (bottom_textline * (255 / 65535.0)).astype(np.uint8)
-            # _, bottom_textline = cv2.threshold(bottom_textline, 50, 255, cv2.THRESH_BINARY)
             bottom_detections = self._recognize_text(bottom_textline, logger)
 
             for d in bottom_detections:
@@ -129,6 +139,19 @@ class BasicOCRReader:
                 d['recognition_type'] = 'number_char'
                 bottom_detections_final.append(d)
 
+            if w < w_trunc:
+                bottom_textline = oriented_filmstrip[ymin:ymax,w_trunc:]
+                bottom_detections = self._recognize_text(bottom_textline, logger)
+
+                for d in bottom_detections:
+                    d['xmin'] = str(d['x1'] + w_trunc)
+                    d['xmax'] = str(d['x2'] + w_trunc)
+                    d['ymin'] = str(d['y1'] + ymin)
+                    d['ymax'] = str(d['y2'] + ymin)
+                    d['recognition_type'] = 'number_char'
+                    bottom_detections_final.append(d)
+                
+                
         return top_detections_final, bottom_detections_final
 
     @staticmethod
@@ -311,7 +334,6 @@ class BasicOCRReader:
         # perform sanity check to ensure enough digits were parsed from the film
         ################################################################################ 
 
-        #expected_groups = int(w / (self.number_spacing + 850))
         if top_successes < 5:
             logger.warning('too many errors (< 5 good detections: {}) when parsing the top line; skipping batch!'.format(top_successes))
             return None
@@ -546,97 +568,102 @@ class BasicOCRReader:
         h, w = textline.shape
         uint8_textline = (textline * (255 / 65535.0)).astype(np.uint8)
 
-        edges = cv2.Canny(uint8_textline, 100, 200)
+        # perform recognition
+        char_boxes = self.tool.image_to_string(
+            Image.fromarray(uint8_textline),
+            lang='glacierdigits7',
+            builder=pyocr.tesseract.CharBoxBuilder()
+        )
 
-        edges = np.amax(edges, axis=0)
-        edges = scipy.ndimage.filters.median_filter(edges, 50) 
-        edges = scipy.ndimage.filters.maximum_filter1d(edges, 100) 
-        edges[0] = 0
-        edges[w-1] = 0
-
-        edge_locs = np.nonzero(edges[:-1] - edges[1:])[0]
-        assert( len(edge_locs) % 2 == 0)
-
+        # record and label film strip
         text_detections = []        
+        for box in char_boxes:
+            (char_x1, char_y1), (char_x2, char_y2) = box.position
+
+            # the output of tesseract has the origin in the lower-left (not the usual upper-left convention)
+            char_y1 = h - char_y1
+            char_y2 = h - char_y2
+            char_y1, char_y2 = char_y2, char_y1
+
+            char_height = char_y2 - char_y1
+            char_length = char_x2 - char_x1
+
+            if char_length < 10 or char_height < 20:
+                logger.debug('invalid char dims; skipping! (I thought it might be: {})'.format(box.content))
+                continue
+
+            hog_recognition = self._hog_OCR(uint8_textline[char_y1:char_y2, char_x1:char_x2].astype(np.uint8), logger)
+            if(box.content != hog_recognition):
+                logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
+
+                if(box.content in ['0', '8'] and hog_recognition in ['0', '8']):
+                    box.content = hog_recognition
+
+                if(box.content in ['1', '7'] and hog_recognition in ['1', '7']):
+                    box.content = hog_recognition
+
+
+            text = '?'
+            if box.content in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+                text = box.content
+
+            # logger.debug('add rectangles around the characters')
+            # textline = cv2.rectangle(textline.copy(), (char_x1, char_y1), (char_x2, char_y2), (0,0,0))                
+            # textline = cv2.putText(textline.copy(), text, (char_x1+20, char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
+
+            detection = {'char' : text,
+                         'x1' : char_x1,
+                         'x2' : char_x2,
+                         'y1' : char_y1,
+                         'y2' : char_y2,
+                         'segment': 0}
+
+            text_detections.append(detection)
+
+        text_detections = sorted(text_detections, key=lambda x: x['x1'])
+            
+        # infer the spacing between digits
+        spacings = []
+        for i in range(len(text_detections) - 1):
+            prev = text_detections[i]
+            curr = text_detections[i+1]
+            space = curr['x1'] - prev['x2']
+            if space >= 0:
+                spacings.append(space)
+
+        kmeans = KMeans(n_clusters=2, random_state=0).fit(np.asarray(spacings).reshape(-1,1))
+        letter_spacing = min(kmeans.cluster_centers_)
+        word_spacing = max(kmeans.cluster_centers_)
+
         segment_number = 0
-        for i in range(0, len(edge_locs), 2):
-            x1 = edge_locs[i]
-            x2 = edge_locs[i+1]
-            length = x2 - x1
-            
-            # perform recognition
-            segment = uint8_textline[:, x1:x2]
+        text_detections[0]['segment'] = 0
+        for i in range(1, len(text_detections)):
+            prev = text_detections[i-1]
+            curr = text_detections[i]
+            space = curr['x1'] - prev['x2']
+            if abs(space - letter_spacing) > abs(space - word_spacing):
+                segment_number += 1
 
-            char_boxes = self.tool.image_to_string(
-                Image.fromarray(segment),
-                lang='glacierdigits7',
-                builder=pyocr.tesseract.CharBoxBuilder()
-            )
+            text_detections[i]['segment'] = segment_number
 
-            # record and label film strip
-            for box in char_boxes:
-                (char_x1, char_y1), (char_x2, char_y2) = box.position
-
-                # the output of tesseract has the origin in the lower-left (not the usual upper-left convention)
-                char_y1 = h - char_y1
-                char_y2 = h - char_y2
-                char_y1, char_y2 = char_y2, char_y1
-
-                char_height = char_y2 - char_y1
-                char_length = char_x2 - char_x1
-                
-                if char_length < 10 or char_height < 20:
-                    logger.debug('invalid char dims; skipping! (I thought it might be: {})'.format(box.content))
-                    continue
-                
-                hog_recognition = self._hog_OCR(segment[char_y1:char_y2, char_x1:char_x2].astype(np.uint8), logger)
-                if(box.content != hog_recognition):
-                    logger.debug('mismatch between tesseract and hog: ' + str(box.content) + ' ' + str(hog_recognition))
-
-                    if(box.content in ['0', '8'] and hog_recognition in ['0', '8']):
-                        box.content = hog_recognition
-                        
-                    if(box.content in ['1', '7'] and hog_recognition in ['1', '7']):
-                        box.content = hog_recognition
-                
-
-                text = '?'
-                if box.content in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
-                    text = box.content
-
-                logger.debug('add rectangles around the characters')
-                textline = cv2.rectangle(textline.copy(), (x1+char_x1, char_y1), (x1+char_x2, char_y2), (0,0,0))                
-                textline = cv2.putText(textline.copy(), text, (x1+char_x1+20, char_y2), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0), 3,  cv2.LINE_AA)
-
-                detection = {'char' : text,
-                             'x1' : x1+char_x1,
-                             'x2' : x1+char_x2,
-                             'y1' : char_y1,
-                             'y2' : char_y2,
-                             'segment': segment_number}
-
-                text_detections.append(detection)
-            segment_number += 1
-            
-        import uuid
-        last_segment = 0
-        xmin = w
-        xmax = 0
+        # import uuid
+        # last_segment = 0
+        # xmin = w
+        # xmax = 0
         #print(len(text_detections))
         #cv2.imwrite('/home/jemmons/tmp/{}.tiff'.format(str(uuid.uuid4())), textline)
 
-        for detection in text_detections:
-            print(detection)
-            if last_segment != detection['segment']:
-                last_segment = detection['segment']
-                cv2.imwrite('/home/jemmons/tmp/{}.tiff'.format(str(uuid.uuid4())), textline[:, max(xmin-50,0):min(w,xmax+50)])
-                xmin = w
-                xmax = 0
+        # for detection in text_detections:
+        #     if last_segment != detection['segment']:
+        #         last_segment = detection['segment']
+        #         cv2.imwrite('/home/jemmons/tmp/{}.tiff'.format(str(uuid.uuid4())), textline[:, max(xmin-50,0):min(w,xmax+50)])
+        #         xmin = w
+        #         xmax = 0
                 
-            if detection['x1'] < xmin:
-                xmin = detection['x1']
-            if detection['x2'] > xmax:
-                xmax = detection['x2']
+        #     if detection['x1'] < xmin:
+        #         xmin = detection['x1']
+        #     if detection['x2'] > xmax:
+        #         xmax = detection['x2']
                             
         return text_detections
         
