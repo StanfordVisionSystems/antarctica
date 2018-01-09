@@ -181,6 +181,7 @@ class image_processer:
         ########################################################################
         # perform OCR
         ########################################################################
+        logger.debug('Performing OCR')
         metadata = None
         number_groups = None
         image_data['horizontal_flip'] = preprocessing_metadata['flip_x']
@@ -203,6 +204,7 @@ class image_processer:
         ########################################################################
         # check that the recognized text is sensible and interpret it
         ########################################################################
+        logger.debug('Performing interpretation')
         interpretation = None
         try:
             interpretation = self.ocr_reader._interpret_text(text_detections, try_image_orientation.shape, logger)
