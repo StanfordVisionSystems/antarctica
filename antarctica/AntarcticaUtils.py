@@ -38,7 +38,7 @@ class BasicOCRReader:
             template = cv2.flip(template, 1)
             self.backwards_num_templates.append(template.astype(np.uint8))
 
-        self.number_spacing = 1250
+        self.number_spacing = 0
         
     def get_ocr_tool_name(self):
 
@@ -88,9 +88,8 @@ class BasicOCRReader:
     def find_text(self, oriented_filmstrip, preprocessing_metadata, logger):
 
         h, w = oriented_filmstrip.shape
-        w_trunc = min(w, 32767)
-        assert w < 2*32767
-        
+        w_trunc = min(w, 32000)
+        assert w < 2*32000
         # TODO(jremmons) rescale the height of the roi to be less than 32767 (maxval of  int16)
         
         top_detections_final = []
@@ -110,6 +109,8 @@ class BasicOCRReader:
                 d['recognition_type'] = 'number_char'
                 top_detections_final.append(d)
 
+            max_top_segment_num = max(top_detections_final, key=lambda x: x['segment'])['segment']
+
             if w > w_trunc:
                 top_textline = oriented_filmstrip[ymin:ymax,w_trunc:]
                 top_detections = self._recognize_text(top_textline, logger)
@@ -119,6 +120,7 @@ class BasicOCRReader:
                     d['xmax'] = str(d['x2'] + w_trunc)
                     d['ymin'] = str(d['y1'] + ymin)
                     d['ymax'] = str(d['y2'] + ymin)
+                    d['segment'] =  d['segment'] + max_top_segment_num + 1
                     d['recognition_type'] = 'number_char'
                     top_detections_final.append(d)
 
@@ -139,7 +141,9 @@ class BasicOCRReader:
                 d['recognition_type'] = 'number_char'
                 bottom_detections_final.append(d)
 
-            if w < w_trunc:
+            max_bottom_segment_num = max(bottom_detections_final, key=lambda x: x['segment'])['segment']
+
+            if w > w_trunc:
                 bottom_textline = oriented_filmstrip[ymin:ymax,w_trunc:]
                 bottom_detections = self._recognize_text(bottom_textline, logger)
 
@@ -148,9 +152,9 @@ class BasicOCRReader:
                     d['xmax'] = str(d['x2'] + w_trunc)
                     d['ymin'] = str(d['y1'] + ymin)
                     d['ymax'] = str(d['y2'] + ymin)
+                    d['segment'] =  d['segment'] + max_bottom_segment_num + 1
                     d['recognition_type'] = 'number_char'
                     bottom_detections_final.append(d)
-                
                 
         return top_detections_final, bottom_detections_final
 
@@ -202,7 +206,7 @@ class BasicOCRReader:
     def _interpret_text(self, text_detections, shape, logger):
         top_detections, bottom_detections = text_detections
         h, w = shape
-        
+
         ################################################################################ 
         # gather statistics about the detected characters
         ################################################################################ 
@@ -227,31 +231,31 @@ class BasicOCRReader:
         bottom_y2_median, bottom_y2_average, bottom_y2_std, bottom_y2_mid = stats(bottom_y2)
 
         # split the detected characters into groups
-        top_groups = []
-        current_group = []
-        current_x = top_detections[0]['x1']
-        for detection in top_detections:
-            if(detection['x1'] < current_x + self.number_spacing):
-                current_x = detection['x1']
-                current_group.append(detection)
+        top_groups = [[]]
+        segment_num = 0
+        for d in top_detections:
+            if d['segment'] == segment_num:
+                top_groups[segment_num].append(d)
+            elif d['segment'] == segment_num+1:
+                top_groups.append([])
+
+                segment_num += 1
+                top_groups[segment_num].append(d)
             else:
-                top_groups.append(current_group)
+                assert False, 'the segment numbers for detection is not increasing by +1: increased by {}'.format(d['segment'] - segment_num)
+                
+        bottom_groups = [[]]
+        segment_num = 0
+        for d in bottom_detections:
+            if d['segment'] == segment_num:
+                bottom_groups[segment_num].append(d)
+            elif d['segment'] == segment_num+1:
+                bottom_groups.append([])
 
-                current_x = detection['x1']
-                current_group = [detection]
-
-        bottom_groups = []
-        current_group = []
-        current_x = bottom_detections[0]['x1']
-        for detection in bottom_detections:
-            if(detection['x1'] < current_x + self.number_spacing):
-                current_x = detection['x1']
-                current_group.append(detection)
+                segment_num += 1
+                bottom_groups[segment_num].append(d)
             else:
-                bottom_groups.append(current_group)
-
-                current_x = detection['x1']
-                current_group = [detection]
+                assert False, 'the segment numbers for detection is not increasing by +1: increased by {}'.format(d['segment'] - segment_num)
 
         # TODO(jremmons) do something with the stats on the digit locations
         
@@ -265,7 +269,7 @@ class BasicOCRReader:
             xmax = group[interval[0]]['xmax']
             ymin = group[interval[0]]['ymin']
             ymax = group[interval[0]]['ymax']
-            
+
             digits = ''
             for i in range(interval[0], interval[1]):                
                 group[i]['number_type'] = t
@@ -308,11 +312,10 @@ class BasicOCRReader:
 
             date_numbers.append(parse_grouping(group, (0,6),'date'))
             time_numbers.append(parse_grouping(group, (6,12),'time'))
-            
             top_successes += 1
 
         # perform an intelligent recognition on the bottom strip
-        # should be a 4-digit setting, 3-digit flight, and 6-digit cbd
+        # should be a 4-digit setting, 3-digit flight, and 4-digit cbd
         setting_numbers = []
         flight_numbers = []
         cbd_numbers = []
@@ -324,7 +327,7 @@ class BasicOCRReader:
                 flight_numbers.append(None)
                 cbd_numbers.append(None)
                 continue
-
+                
             setting_numbers.append(parse_grouping(group, (0,4),'setting'))
             flight_numbers.append(parse_grouping(group, (4,7),'flight'))
             cbd_numbers.append(parse_grouping(group, (7,11),'cbd'))
@@ -355,26 +358,34 @@ class BasicOCRReader:
             if len(ret) == 2:
                 most_common, second_most_common = counter.most_common(2)
                 return most_common, second_most_common
-            else:
+            elif len(ret) == 1:
                 return ret[0], ('NaN', 0)
-            
+            else:
+                return ('NaN', 0), ('NaN', 0)
+
+        date_number_final = ''
         date_most_common, date_second_most_common = interpert_constants(date_numbers)
         if date_most_common[1] < 2*date_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
-            return None
-        date_number_final = date_most_common[0]
-        
+            #return None
+        else:
+            date_number_final = date_most_common[0]
+
+        setting_number_final = ''
         setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
         if setting_most_common[1] < 2*setting_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
-            return None
-        setting_number_final = setting_most_common[0]
-        
+            #return None
+        else:
+            setting_number_final = setting_most_common[0]
+
+        flight_number_final = ''
         flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
         if flight_most_common[1] < 2*flight_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
-            return None
-        flight_number_final = flight_most_common[0]
+            #return None
+        else:
+            flight_number_final = flight_most_common[0]
         
         ################################################################################ 
         # perform indepth sanity check on cbds
@@ -384,6 +395,7 @@ class BasicOCRReader:
             if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
                 cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
 
+        print(cbd_deltas)
         cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
         if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
@@ -533,10 +545,10 @@ class BasicOCRReader:
                 time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
                 
         time_final = list(map(str, map(sec2time, time_fix)))
-
-        ################################################################################ 
+        
+        ################################################################################
         # gather the data needed for the interpretation
-        ################################################################################ 
+        ################################################################################
         interpretation = {
             'date' : date_number_final,
             'time1' : time_final[0],
@@ -569,13 +581,16 @@ class BasicOCRReader:
         uint8_textline = (textline * (255 / 65535.0)).astype(np.uint8)
 
         # perform recognition
+        logger.debug('starting ocr')
         char_boxes = self.tool.image_to_string(
             Image.fromarray(uint8_textline),
             lang='glacierdigits7',
             builder=pyocr.tesseract.CharBoxBuilder()
         )
+        logger.debug('finish ocr')
 
         # record and label film strip
+        logger.debug('starting parsing')
         text_detections = []        
         for box in char_boxes:
             (char_x1, char_y1), (char_x2, char_y2) = box.position
@@ -621,8 +636,10 @@ class BasicOCRReader:
             text_detections.append(detection)
 
         text_detections = sorted(text_detections, key=lambda x: x['x1'])
+        logger.debug('end parsing')
             
         # infer the spacing between digits
+        logger.debug('start segment inference')
         spacings = []
         for i in range(len(text_detections) - 1):
             prev = text_detections[i]
@@ -645,6 +662,8 @@ class BasicOCRReader:
                 segment_number += 1
 
             text_detections[i]['segment'] = segment_number
+            
+        logger.debug('end segment inference')
 
         # import uuid
         # last_segment = 0
