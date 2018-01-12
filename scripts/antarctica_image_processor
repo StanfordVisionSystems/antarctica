@@ -8,17 +8,17 @@ import git
 import os
 import simplejson
 import datetime
+import re
 
 import pathos.multiprocessing as mp
 import numpy as np
+import subprocess as sub
 import AntarcticaUtils as a
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# number of frames to stitch together
-BATCH_SIZE = 25
 RESULTS_FILENAME = 'results.csv'
 RESULTS_IMAGE_DIRNAME = 'stitched_images'
 
@@ -26,16 +26,15 @@ RESULTS_IMAGE_DIRNAME = 'stitched_images'
 CSV_COMMENT_LINES = ['creation_time: '+str(datetime.datetime.now())] #,
 #                     'code_version: ' + str(git.Repo(search_parent_directories=True).head.object.hexsha)]
 
-OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{horizontal_flip},{vertical_flip},{high_res_filename},{low_res_filename},{status},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{cbd1_fractional},{cbd2_fractional},{num_additional_columns}'
+OUTPUT_IMAGE_FILENAME_FORMAT = '{}_{}_{}-reel_begin_end.{}'
+OUTPUT_FORMAT = '{reel_num},{begin_image_num},{end_image_num},{horizontal_flip},{vertical_flip},{high_res_filename},{low_res_filename},{status},{top_line},{top_line_y1},{top_line_y2},{top_line_num_groups},{bot_line},{bot_line_y1},{bot_line_y2},{bot_line_num_groups},{date},{time1},{time2},{setting},{flight},{cbd1},{cbd2},{cbd1_fractional},{cbd2_fractional},{num_additional_columns}'
 
-OUTPUT_IMAGE_FILENAME_FORMAT = '{}_{}_{}-reel_image_image.{}'
 OUTPUT_SMALL_IMAGE_FACTOR = 1/3.16227766017 # 1/sqrt(10)
 
 class image_processer:
 
     SUCCESS = '0_success'
     COULD_NOT_PARSE_IMAGE_FILENAME = '1_malformed_image_filename'
-    INCORRECT_NUM_IMAGES = '2_not_enough_images_in_batch'
     COULD_NOT_READ_IMAGE = '3_image_read_error'
     COULD_NOT_STITCH_FILM = '4_image_stitch_error'
     COULD_NOT_ORIENT_FILM = '5_image_orientation_error'
@@ -50,27 +49,31 @@ class image_processer:
         self.count = 0
         
     def get_filename_num(self, filename):
-        return filename.split('_')[-1].split('.')[0]
+        return filename.split('-')[0].split('_')
 
     def noop(self, image_data, reason):
         logger.critical('FAILURE: {} {}'.format(image_data['min'], image_data['max']))
         logger.debug('performing noop for images because of: {}'.format(reason))
 
-        image_names = None
-        if reason == image_processer.COULD_NOT_PARSE_IMAGE_FILENAME:
-            image_names = image_data
-        else:
-            image_names = image_data['images']
- 
+        image_path = image_data['image_path']
+
         d = {
             'reel_num' : self.reel_num,
             'begin_image_num' : image_data['min'],
             'end_image_num' : image_data['max'],
             'horizontal_flip' : '',
-            'vertical_flip' : 'false',
+            'vertical_flip' : '',
             'high_res_filename' : '',
             'low_res_filename' : '',
             'status' : reason,
+            'top_line' : image_data['top_line'],
+            'top_line_y1' : image_data['top_line_y1'],
+            'top_line_y2' : image_data['top_line_y2'],
+            'top_line_num_groups' : image_data['top_line_num_groups'],
+            'bot_line' : image_data['bot_line'],
+            'bot_line_y1' : image_data['bot_line_y1'],
+            'bot_line_y2' : image_data['bot_line_y2'],
+            'bot_line_num_groups' : image_data['bot_line_num_groups'],
             'date' : '',
             'time1' : '',
             'time2' : '',
@@ -83,8 +86,12 @@ class image_processer:
             'num_additional_columns' : '0'
         }
 
-        if reason not in [image_processer.COULD_NOT_PARSE_IMAGE_FILENAME, image_processer.INCORRECT_NUM_IMAGES, image_processer.COULD_NOT_READ_IMAGE]:
-            im = image_data['try_oriented_image']
+        if reason in [image_processer.COULD_NOT_PARSE_IMAGE_FILENAME, image_processer.COULD_NOT_READ_IMAGE]:
+            assert False, 'fatal error: could not read {}'.format(image_data['image_path'])
+            return
+
+        elif reason not in [image_processer.COULD_NOT_PARSE_IMAGE_FILENAME]:
+            im = image_data['raster']
 
             d['horizontal_flip'] = image_data['horizontal_flip']
             d['vertical_flip'] = image_data['vertical_flip']
@@ -93,26 +100,23 @@ class image_processer:
             if im is None:
                 lines.append(OUTPUT_FORMAT.format(**d))
                 
-            tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, image_data['min'], image_data['max'], 'tiff'))
-            jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, image_data['min'], image_data['max'], 'jpg'))
+            tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, str(image_data['min']).zfill(7), str(image_data['max']).zfill(7), 'tiff'))
+            jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, str(image_data['min']).zfill(7), str(image_data['max']).zfill(7), 'jpg'))
         
-            ret = cv2.imwrite(tiff_filename, im)
-            if not ret:
+            ret = sub.check_call(['cp', '--reflink', image_data['image_path'], tiff_filename])
+            if ret != 0:
                 logger.debug('Could not process {}. Adding partial noop line'.format(image))
                 lines.append(OUTPUT_FORMAT.format(**d))
-        
             d['high_res_filename'] = tiff_filename
 
-            oriented_image_labelled = a.BasicOCRReader.annotate_image_digits(im, image_data['text_detections'][0]+image_data['text_detections'][1], logger)
-            
-            im_small = cv2.resize(oriented_image_labelled, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
+            image_labelled = a.BasicOCRReader.annotate_image_digits(im, image_data['text_detections'][0]+image_data['text_detections'][1], logger)            
+            im_small = cv2.resize(image_labelled, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
             im_small = (im_small * (255 / 65535.0)).astype(np.uint8)
-            ret = cv2.imwrite(jpg_filename, im_small)
-        
+
+            ret = cv2.imwrite(jpg_filename, im_small)        
             if not ret:
                 logger.debug('Could not process {}. Adding partial noop line'.format(image))
                 lines.append(OUTPUT_FORMAT.format(**d))
-
             d['low_res_filename'] = jpg_filename
 
             line = OUTPUT_FORMAT.format(**d)
@@ -128,225 +132,151 @@ class image_processer:
             return [line]
 
         else:
-
-            lines = []
-            for image in image_names:
-                try:
-                    num = self.get_filename_num(image)
-                except:
-                    logger.critical('Could not parse the image number from the filename {}; using global counter'.format(image))
-                    num = str(self.count)
-                    self.count += 1
-
-                d = {
-                    'reel_num' : self.reel_num,
-                    'begin_image_num' : num,
-                    'end_image_num' : num,
-                    'horizontal_flip' : 'false',
-                    'vertical_flip' : 'false',
-                    'high_res_filename' : '',
-                    'low_res_filename' : '',
-                    'status' : reason,
-                    'date' : '',
-                    'time1' : '',
-                    'time2' : '',
-                    'setting' : '',
-                    'flight' : '', 
-                    'cbd1' : '', 
-                    'cbd2' : '', 
-                    'cbd1_fractional' : '',
-                    'cbd2_fractional' : '',
-                    'num_additional_columns' : '0', 
-                }
-            
-                im = cv2.imread(image)
-                if im is None:
-                    lines.append(OUTPUT_FORMAT.format(**d))
-                    continue
-                
-                tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, num, num, 'tiff'))
-                jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, num, num, 'jpg'))
-
-                ret = cv2.imwrite(tiff_filename, im)
-                if not ret:
-                    logger.debug('Could not process {}. Adding partial noop line'.format(image))
-                    lines.append(OUTPUT_FORMAT.format(**d))
-                    continue
-            
-                d['high_res_filename'] = tiff_filename
-            
-                im_small = cv2.resize(im, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
-                im_small = (im_small * (255 / 65535.0)).astype(np.uint8)
-                ret = cv2.imwrite(jpg_filename, im_small)
-
-                if not ret:
-                    logger.debug('Could not process {}. Adding partial noop line'.format(image))
-                    lines.append(OUTPUT_FORMAT.format(**d))
-                    continue
-
-                d['low_res_filename'] = jpg_filename
-                
-                lines.append(OUTPUT_FORMAT.format(**d))
-                
-                logger.debug('Added noop line for image {}'.format(image))
-
-            return lines
+            assert False, 'this should never run!'
+       
         
-    def __call__(self, images):
+    def __call__(self, image_path):
 
         logger.debug('processing images in reel {}'.format(self.reel_num))
 
-        image_data = {'images' : images, 'nums' : [], 'min' : None, 'max' : None, 'rasters' : []}
+        image_data = {
+            'image_path' : image_path,
+            'reel' : None,
+            'min' : None,
+            'max' : None,
+            'raster' : None
+        }
+            
         try:
-            for image in images:
-                num = self.get_filename_num(image)
-                image_data['nums'].append(num)
+            image_path_basename = os.path.basename(image_path)
+            image_reel, image_min, image_max = self.get_filename_num(image_path_basename)
         except:
             logger.error('input filename is malformed; could not parse image number')
-            return self.noop(images, image_processer.COULD_NOT_PARSE_IMAGE_FILENAME)
+            return self.noop(image_path, image_processer.COULD_NOT_PARSE_IMAGE_FILENAME)
 
-        range_min = min(image_data['nums'])
-        range_max = max(image_data['nums'])
-        image_data['min'] = range_min
-        image_data['max'] = range_max
-        logger.debug('processing images {} to {}'.format(image_data['min'], image_data['max']))
-
+        image_data['reel'] = int(image_reel)
+        image_data['min'] = int(image_min)
+        image_data['max'] = int(image_max)
         logger.debug('Created metadata store')
-        
-        # check the size of the batch
-        if len(images) != BATCH_SIZE:
-            logger.warning('Recieved {} frames when {} were expected. Skipping batch!'.format(len(images), BATCH_SIZE))
-            return self.noop(image_data, image_processer.INCORRECT_NUM_IMAGES)
+        logger.debug('processing range {} - {}'.format(image_data['min'], image_data['max']))
 
         ########################################################################
-        # attempt to open the images
+        # attempt to open the image and associated metadata
         ########################################################################
-        image_data['nums'] = []
-        image_data['rasters'] = []
-        for image in images:
-            num = self.get_filename_num(image)
-            raster = cv2.imread(image, cv2.IMREAD_UNCHANGED)
+        image_raster = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 
-            if raster is None:
-                logger.warning('Could not open {}. Skipping batch!'.format(image))
-                return self.noop(image_data, image_processer.COULD_NOT_READ_IMAGE)
+        if image_raster is None:
+            logger.warning('Could not open {}. Skipping batch!'.format(image_path))
+            return self.noop(image_data, image_processer.COULD_NOT_READ_IMAGE)
+
+        image_data['raster'] = image_raster
+        logger.debug('Loaded image')
+
+        with open(image_path+'.csv', 'r') as f:
+            r = re.compile(r'(?:[^,(\[]|\[[^\]]*\])+')
+            data_elements = r.findall(f.read())
+            preprocessing_metadata = {
+                'flip_x': eval(data_elements[0]),
+                'flip_y': eval(data_elements[1]),
+                'top_line' : eval(data_elements[2]),
+                'top_line_y' : eval(data_elements[3]),
+                'top_num_groups' : eval(data_elements[4]),
+                'bot_line' : eval(data_elements[5]),
+                'bot_line_y' : eval(data_elements[6]),
+                'bot_num_groups' : eval(data_elements[7]),
+            }
+
+        image_data['horizontal_flip'] = preprocessing_metadata['flip_x']
+        image_data['vertical_flip'] = preprocessing_metadata['flip_y']
+
+        image_data['top_line'] = preprocessing_metadata['top_line']
+        if image_data['top_line']:
+            image_data['top_line_y1'] = preprocessing_metadata['top_line_y'][0]
+            image_data['top_line_y2'] = preprocessing_metadata['top_line_y'][1]
+            image_data['top_line_num_groups'] = preprocessing_metadata['top_num_groups']
+        else:
+            image_data['top_line_y1'] = '' 
+            image_data['top_line_y2'] = '' 
+            image_data['top_line_num_groups'] = ''
             
-            image_data['rasters'].append(raster)
-        logger.debug('Loaded images')
-                
-        ########################################################################
-        # try to stitch the frames together
-        ########################################################################
-        try:
-            stitched_image = a.BasicFilmstripStitcher.stitch(image_data['rasters'], logger)
-        except:
-            stitched_image = None
-        if stitched_image is None:
-            logger.warning('Could not stitch film strips together. Skipping batch!')
-            return self.noop(image_data, image_processer.COULD_NOT_STITCH_FILM)
+        image_data['bot_line'] = preprocessing_metadata['bot_line']
+        if image_data['bot_line']:
+            image_data['bot_line_y1'] = preprocessing_metadata['bot_line_y'][0]
+            image_data['bot_line_y2'] = preprocessing_metadata['bot_line_y'][1]
+            image_data['bot_line_num_groups'] = preprocessing_metadata['bot_num_groups']
+        else:
+            image_data['bot_line_y1'] = '' 
+            image_data['bot_line_y2'] = '' 
+            image_data['bot_line_num_groups'] = ''
 
-        logger.debug('Finished stitching image')
-        
-        ########################################################################
-        # rotate the film to the correct orientation
-        ########################################################################
-        try:
-            oriented_image = self.ocr_reader.orient(stitched_image, logger)
-        except:
-            oriented_image = None
-        if oriented_image is None:
-            logger.warning('Could not determine the correct orientation of the film. Skipping batch!')
-            return self.noop(image_data, image_processer.COULD_NOT_ORIENT_FILM)
-        image_data['oriented_image'] = oriented_image
-        logger.debug('Finished orienting image')
 
         ########################################################################
         # perform OCR
         ########################################################################
+        logger.debug('Performing OCR')
         metadata = None
         number_groups = None
-        end = 0
-        max_detections = 0
-        horizontal_flip = 'false'
-        vertical_flip = 'false'
-        image_data['horizontal_flip'] = horizontal_flip
-        image_data['vertical_flip'] = vertical_flip
-        image_data['try_oriented_image'] = oriented_image
         image_data['text_detections'] = ([], [])
-        for orientation in [(False, False), (True, True), (True, False), (False, True)]:
-            logger.debug('trying orientation horizontal:{} vertical:{}'.format(orientation[0], orientation[1]))
-            end += 1
-            
-            try_image_orientation = oriented_image.copy()
-            if orientation[1]:
-                try_image_orientation = cv2.flip(try_image_orientation, 0)
-                vertical_flip = 'true'
-            if orientation[0]:
-                try_image_orientation = cv2.flip(try_image_orientation, 1)
-                horizontal_flip = 'true'
                 
-            text_detections = self.ocr_reader.find_text(try_image_orientation, logger)
-            try:
-                text_detections = self.ocr_reader.find_text(try_image_orientation, logger)
-            except:
-                text_detections = None
-            if text_detections is None:
-                if end < 4:
-                    logger.warning('Could not stitched film strip. Trying a new orientation')
-                    continue
+        text_detections = None
+        #text_detections = self.ocr_reader.find_text(image_data['raster'], preprocessing_metadata, logger)
+        try:
+            text_detections = self.ocr_reader.find_text(image_data['raster'], preprocessing_metadata, logger)
+        except:
+            pass
 
-                logger.warning('Could not find text on the stitched film strip. Skipping batch!')
-                return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
+        if text_detections is None:
+            logger.warning('Could not find text on the stitched film strip. Skipping batch!')
+            return self.noop(image_data, image_processer.COULD_NOT_FIND_TEXT)
 
-            logger.debug('Finished detecting text in the image')
-
-            if len(text_detections[0]) + len(text_detections[1]) > max_detections:
-                logger.debug('new best detection')
-                max_detections = len(text_detections[0]) + len(text_detections[1])
-
-                image_data['horizontal_flip'] = horizontal_flip
-                image_data['vertical_flip'] = vertical_flip
-                image_data['try_oriented_image'] = try_image_orientation
-                image_data['text_detections'] = text_detections
-            
-            ########################################################################
-            # check that the recognized text is sensible and interpret it
-            ########################################################################
-            try:
-                interpretation = self.ocr_reader._interpret_text(text_detections, try_image_orientation.shape, logger)
-            except:
-                interpretation = None
-            if interpretation is None:
-                if end < 4:
-                    logger.warning('Could not interpret text on the stitched film strip. Trying a new orientation')
-                    continue
-
-                logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
-                return self.noop(image_data, image_processer.COULD_NOT_PARSE_TEXT)
-            
-            metadata, number_groups = interpretation
-            metadata['horizontal_flip'] = horizontal_flip
-            metadata['vertical_flip'] = vertical_flip
-            oriented_image = try_image_orientation
-            if interpretation is not None:
-                logger.debug('Finished interpretating text in the image')
-                break
-            
+        image_data['text_detections'] = text_detections
+        logger.debug('Finished detecting text in the image')        
+    
         ########################################################################
-        # dump output to tiff and annotated jpeg file
+        # check that the recognized text is sensible and interpret it
         ########################################################################
-        tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, image_data['min'], image_data['max'], 'tiff'))
-        jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, image_data['min'], image_data['max'], 'jpg'))
+        logger.debug('Performing interpretation')
+        interpretation = None
+        #interpretation = self.ocr_reader._interpret_text(text_detections, image_data['raster'].shape, logger)
+        try:
+            interpretation = self.ocr_reader._interpret_text(text_detections, image_data['raster'].shape, logger)
+        except:
+            pass
 
-        ret = cv2.imwrite(tiff_filename, oriented_image)
-        if not ret:
+        if interpretation is None:
+            logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')
+            return self.noop(image_data, image_processer.COULD_NOT_PARSE_TEXT)
+            
+        metadata, number_groups = interpretation
+
+        assert image_data['horizontal_flip'] == preprocessing_metadata['flip_x']
+        assert image_data['vertical_flip'] == preprocessing_metadata['flip_y']
+        metadata['horizontal_flip'] = image_data['horizontal_flip']
+        metadata['vertical_flip'] = image_data['vertical_flip']
+        metadata['top_line'] = image_data['top_line']
+        metadata['top_line_y1'] = image_data['top_line_y1']
+        metadata['top_line_y2'] = image_data['top_line_y2']
+        metadata['top_line_num_groups'] = image_data['top_line_num_groups']
+        metadata['bot_line'] = image_data['bot_line']
+        metadata['bot_line_y1'] = image_data['bot_line_y1']
+        metadata['bot_line_y2'] = image_data['bot_line_y2']
+        metadata['bot_line_num_groups'] = image_data['bot_line_num_groups']
+
+        ########################################################################
+        # dump annotated jpeg file and copy the tiff file
+        ########################################################################
+        tiff_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, str(image_data['min']).zfill(7), str(image_data['max']).zfill(7), 'tiff'))
+        jpg_filename = os.path.join(self.output_dir, RESULTS_IMAGE_DIRNAME, OUTPUT_IMAGE_FILENAME_FORMAT.format(self.reel_num, str(image_data['min']).zfill(7), str(image_data['max']).zfill(7), 'jpg'))
+
+        ret = sub.check_call(['cp', '--reflink', image_path, tiff_filename])
+        if ret != 0:
             logger.warning('Could not write tiff output to disk (ret={}); skipping batch!'.format(ret))
             return self.noop(image_data, image_processer.COULD_NOT_WRITE_STITCHED_IMAGE)
 
-        oriented_image_labelled = a.BasicOCRReader.annotate_image(oriented_image, number_groups, logger)
-        oriented_image_small = cv2.resize(oriented_image_labelled, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
-        oriented_image_small = (oriented_image_small * (255 / 65535.0)).astype(np.uint8)
-        ret = cv2.imwrite(jpg_filename, oriented_image_small)
+        image_labelled = a.BasicOCRReader.annotate_image(image_data['raster'], number_groups, logger)
+        image_small = cv2.resize(image_labelled, None, fx=OUTPUT_SMALL_IMAGE_FACTOR, fy=OUTPUT_SMALL_IMAGE_FACTOR, interpolation = cv2.INTER_CUBIC)
+        image_small = (image_small * (255 / 65535.0)).astype(np.uint8)
+        ret = cv2.imwrite(jpg_filename, image_small)
         if not ret:
             logger.warning('Could not write jpg output to disk (ret={}); skipping batch!'.format(ret))
             return self.noop(image_data, image_processer.COULD_NOT_WRITE_STITCHED_IMAGE)
@@ -417,7 +347,7 @@ def main(args):
     elif args.flush_interval is 0:
         logger.error('0 is not a valid flush interval (use -1 to disable flushing)')
     else:
-        macro_batch_size = BATCH_SIZE * args.flush_interval * args.num_workers
+        macro_batch_size = args.flush_interval * args.num_workers
         macro_batches = []
         for i in range(0, len(args.images), macro_batch_size):
             macro_batches.append(args.images[i:i+macro_batch_size])
@@ -427,12 +357,12 @@ def main(args):
     logger.debug('Begin processing batch(es)')
     for macro_batch in macro_batches:
         batches = []
-        for i in range(0, len(macro_batch), BATCH_SIZE):
-            batches.append(macro_batch[i:i+BATCH_SIZE])
+        for i in range(len(macro_batch)):
+            batches.append(macro_batch[i])
 
         CSVrows = itertools.chain.from_iterable(
-            #pool.map(image_processer(args.reel_num, args.output_dir), batches)
-            map(image_processer(args.reel_num, args.output_dir), batches)
+            pool.map(image_processer(args.reel_num, args.output_dir), batches)
+            #map(image_processer(args.reel_num, args.output_dir), batches)
         )
         
         with open(args.output_csv, 'a') as f:

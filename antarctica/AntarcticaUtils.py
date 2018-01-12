@@ -359,9 +359,9 @@ class BasicOCRReader:
                 most_common, second_most_common = counter.most_common(2)
                 return most_common, second_most_common
             elif len(ret) == 1:
-                return ret[0], ('NaN', 0)
-            else:
-                return ('NaN', 0), ('NaN', 0)
+                return ret[0], ('', 0)
+
+            return ('', 0), ('', 0)
 
         date_number_final = ''
         date_most_common, date_second_most_common = interpert_constants(date_numbers)
@@ -370,7 +370,9 @@ class BasicOCRReader:
             #return None
         else:
             date_number_final = date_most_common[0]
-
+            if date_number_final is None:
+                date_number_final = ''
+            
         setting_number_final = ''
         setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
         if setting_most_common[1] < 2*setting_second_most_common[1]:
@@ -395,7 +397,6 @@ class BasicOCRReader:
             if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
                 cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
 
-        print(cbd_deltas)
         cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
         if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
@@ -504,6 +505,7 @@ class BasicOCRReader:
             return str(hour).zfill(2) + str(minute).zfill(2) + str(second).zfill(2)
             
         # fix the missing/incorrectly recognized time values        
+        
         time_numbers_seconds = list(map(time2sec, map(time_sanity_check, time_numbers)))
 
         # TODO(jremmons) make sure there are enough time values to 
@@ -513,39 +515,50 @@ class BasicOCRReader:
             if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
                 time_deltas.append(int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]))
 
+        time_delta_number_final = None
+        
         time_delta_most_common, time_delta_second_most_common = interpert_constants(time_deltas)
         if time_delta_most_common[1] < 2*time_delta_second_most_common[1]:
             logger.warning('too many errors (>25%) when interperting the time_delta; skipping batch!')
-            return None
+            # return None
+        else:
+            time_delta_number_final = time_delta_most_common[0]
 
-        if time_delta_most_common[0] != 15 and time_delta_most_common[0] != -15: 
-            logger.warning('invalid time_delta (should be -15 or 15, but it was {}); skipping batch!'.format(time_delta_most_common[0]))
-            return None
+        # if time_delta_most_common[0] != 15 and time_delta_most_common[0] != -15: 
+        #     logger.warning('invalid time_delta (should be -15 or 15, but it was {}); skipping batch!'.format(time_delta_most_common[0]))
+        #     return None
         
-        time_delta_number_final = time_delta_most_common[0]
+        #time_delta_number_final = time_delta_most_common[0]
 
         # fill in the missing/incorrectly recognized TIMEs
         # TODO(jremmons) confirm that the edits made are correct (i.e. check the residual)
-        time_fix = []
-        for i in range(1, len(time_numbers_seconds)):
-            if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
-                if int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]) == time_delta_number_final:
-                    time_fix.append(int(time_numbers_seconds[i-1]))
-                    continue
-            time_fix.append(None)
 
-        time_first_idx = 0
-        for i in range(len(time_fix)):
-            if time_fix[i] is not None:
-                time_first_idx = i
-                break
+        time_final = ['', '']
+        if time_delta_number_final is not None:
+            try:
+                time_fix = []
+                for i in range(1, len(time_numbers_seconds)):
+                    if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
+                        if int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]) == time_delta_number_final:
+                            time_fix.append(int(time_numbers_seconds[i-1]))
+                            continue
+                    time_fix.append(None)
 
-        for i in range(len(time_fix)):
-            if time_fix[i] is None:
-                time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
-                
-        time_final = list(map(str, map(sec2time, time_fix)))
-        
+                time_first_idx = 0
+                for i in range(len(time_fix)):
+                    if time_fix[i] is not None:
+                        time_first_idx = i
+                        break
+
+                for i in range(len(time_fix)):
+                    if time_fix[i] is None:
+                        time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
+
+                time_final = list(map(str, map(sec2time, time_fix)))
+
+            except:
+                pass
+
         ################################################################################
         # gather the data needed for the interpretation
         ################################################################################
