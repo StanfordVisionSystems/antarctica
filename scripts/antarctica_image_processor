@@ -66,14 +66,14 @@ class image_processer:
             'high_res_filename' : '',
             'low_res_filename' : '',
             'status' : reason,
-            'top_line' : image_data['top_line'],
-            'top_line_y1' : image_data['top_line_y1'],
-            'top_line_y2' : image_data['top_line_y2'],
-            'top_line_num_groups' : image_data['top_line_num_groups'],
-            'bot_line' : image_data['bot_line'],
-            'bot_line_y1' : image_data['bot_line_y1'],
-            'bot_line_y2' : image_data['bot_line_y2'],
-            'bot_line_num_groups' : image_data['bot_line_num_groups'],
+            'top_line' : '',
+            'top_line_y1' : '',
+            'top_line_y2' : '',
+            'top_line_num_groups' : '',
+            'bot_line' : '',
+            'bot_line_y1' : '',
+            'bot_line_y2' : '',
+            'bot_line_num_groups' : '',
             'date' : '',
             'time1' : '',
             'time2' : '',
@@ -96,6 +96,14 @@ class image_processer:
             d['horizontal_flip'] = image_data['horizontal_flip']
             d['vertical_flip'] = image_data['vertical_flip']
             d['num_additional_columns'] = len(image_data['text_detections'][0]) + len(image_data['text_detections'][1])
+            d['top_line'] = image_data['top_line']
+            d['top_line_y1'] = image_data['top_line_y1']
+            d['top_line_y2'] = image_data['top_line_y2']
+            d['top_line_num_groups'] = image_data['top_line_num_groups']
+            d['bot_line'] = image_data['bot_line']
+            d['bot_line_y1'] = image_data['bot_line_y1']
+            d['bot_line_y2'] = image_data['bot_line_y2']
+            d['bot_line_num_groups'] = image_data['bot_line_num_groups']
             
             if im is None:
                 lines.append(OUTPUT_FORMAT.format(**d))
