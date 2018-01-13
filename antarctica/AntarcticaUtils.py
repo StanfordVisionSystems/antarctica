@@ -380,6 +380,8 @@ class BasicOCRReader:
             #return None
         else:
             setting_number_final = setting_most_common[0]
+            if setting_number_final is None:
+                setting_number_final = ''
 
         flight_number_final = ''
         flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
@@ -388,6 +390,8 @@ class BasicOCRReader:
             #return None
         else:
             flight_number_final = flight_most_common[0]
+            if flight_number_final is None:
+                flight_number_final = ''
         
         ################################################################################ 
         # perform indepth sanity check on cbds
@@ -581,8 +585,20 @@ class BasicOCRReader:
                     if time_fix[i] is None:
                         time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
 
-                time_final = list(map(str, map(sec2time, time_fix)))
+                        
+                time_fixed = list(map(str, map(sec2time, time_fix)))
+                first_time = time_fix[time_first_idx]
+                first_time_idx = time_first_idx
+                is_sensible = True
+                for i in range(len(time_fixed)):
+                    n = time_fixed[i]
+                    if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
+                        is_sensible = False
+                        break
 
+                if is_sensible:
+                    time_final = time_fixed
+                
             except:
                 pass
 
