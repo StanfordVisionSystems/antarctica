@@ -210,25 +210,25 @@ class BasicOCRReader:
         ################################################################################ 
         # gather statistics about the detected characters
         ################################################################################ 
-        def stats(arr):
-            median = np.median(arr)
-            average = np.average(arr)
-            std = np.std(arr)
-            mid = median if abs(average - median) > std/2.0 else average
+        # def stats(arr):
+        #     median = np.median(arr)
+        #     average = np.average(arr)
+        #     std = np.std(arr)
+        #     mid = median if abs(average - median) > std/2.0 else average
 
-            return median, average, mid, std            
+        #     return median, average, mid, std            
 
-        top_y1 = np.array(list(map(lambda x : x['y1'], top_detections)))
-        top_y1_median, top_y1_average, top_y1_std, top_y1_mid = stats(top_y1)
+        # top_y1 = np.array(list(map(lambda x : x['y1'], top_detections)))
+        # top_y1_median, top_y1_average, top_y1_std, top_y1_mid = stats(top_y1)
 
-        top_y2 = np.array(list(map(lambda x : x['y2'], top_detections)))
-        top_y2_median, top_y2_average, top_y2_std, top_y2_mid = stats(top_y2)
+        # top_y2 = np.array(list(map(lambda x : x['y2'], top_detections)))
+        # top_y2_median, top_y2_average, top_y2_std, top_y2_mid = stats(top_y2)
         
-        bottom_y1 = np.array(list(map(lambda x : x['y1'], bottom_detections)))
-        bottom_y1_median, bottom_y1_average, bottom_y1_std, bottom_y1_mid = stats(bottom_y1)
+        # bottom_y1 = np.array(list(map(lambda x : x['y1'], bottom_detections)))
+        # bottom_y1_median, bottom_y1_average, bottom_y1_std, bottom_y1_mid = stats(bottom_y1)
 
-        bottom_y2 = np.array(list(map(lambda x : x['y2'], bottom_detections)))
-        bottom_y2_median, bottom_y2_average, bottom_y2_std, bottom_y2_mid = stats(bottom_y2)
+        # bottom_y2 = np.array(list(map(lambda x : x['y2'], bottom_detections)))
+        # bottom_y2_median, bottom_y2_average, bottom_y2_std, bottom_y2_mid = stats(bottom_y2)
 
         # split the detected characters into groups
         top_groups = [[]]
@@ -257,8 +257,6 @@ class BasicOCRReader:
             else:
                 assert False, 'the segment numbers for detection is not increasing by +1: increased by {}'.format(d['segment'] - segment_num)
 
-        # TODO(jremmons) do something with the stats on the digit locations
-        
         ################################################################################ 
         # parse the digits
         ################################################################################ 
@@ -338,12 +336,12 @@ class BasicOCRReader:
         ################################################################################ 
 
         if top_successes < 5:
-            logger.warning('too many errors (< 5 good detections: {}) when parsing the top line; skipping batch!'.format(top_successes))
+            logger.warning('too many errors (< 5 good detections: {}) when parsing the top line'.format(top_successes))
             #return None
 
         if bottom_successes < 5:
-            logger.warning('too many errors (< 5 good detections: {}) when parsing the bottom line; skipping batch!'.format(bottom_successes))
-            return None
+            logger.warning('too many errors (< 5 good detections: {}) when parsing the bottom line'.format(bottom_successes))
+            #return None
 
         ################################################################################ 
         # perform semantic sanity check on the "constant" digits from each segment
@@ -364,34 +362,45 @@ class BasicOCRReader:
             return ('', 0), ('', 0)
 
         date_number_final = ''
-        date_most_common, date_second_most_common = interpert_constants(date_numbers)
-        if date_most_common[1] < 2*date_second_most_common[1]:
-            logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
-            #return None
-        else:
-            date_number_final = date_most_common[0]
-            if date_number_final is None:
-                date_number_final = ''
-            
+        try:
+            date_most_common, date_second_most_common = interpert_constants(date_numbers)
+            if date_most_common[1] < 2*date_second_most_common[1]:
+                logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
+                #return None
+            else:
+                date_number_final = date_most_common[0]
+                if date_number_final is None:
+                    date_number_final = ''
+        except Exception as e:
+            logger.warning(str(e))
+
         setting_number_final = ''
-        setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
-        if setting_most_common[1] < 2*setting_second_most_common[1]:
-            logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
-            #return None
-        else:
-            setting_number_final = setting_most_common[0]
-            if setting_number_final is None:
-                setting_number_final = ''
+        try:
+            setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
+            if setting_most_common[1] < 2*setting_second_most_common[1]:
+                logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
+                #return None
+            else:
+                setting_number_final = setting_most_common[0]
+                if setting_number_final is None:
+                    setting_number_final = ''
+
+        except Exception as e:
+            logger.warning(str(e))
 
         flight_number_final = ''
-        flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
-        if flight_most_common[1] < 2*flight_second_most_common[1]:
-            logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
-            #return None
-        else:
-            flight_number_final = flight_most_common[0]
-            if flight_number_final is None:
-                flight_number_final = ''
+        try:    
+            flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
+            if flight_most_common[1] < 2*flight_second_most_common[1]:
+                logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
+                #return None
+            else:
+                flight_number_final = flight_most_common[0]
+                if flight_number_final is None:
+                    flight_number_final = ''
+
+        except Exception as e:
+            logger.warning(str(e))
         
         ################################################################################ 
         # perform indepth sanity check on cbds
@@ -408,7 +417,7 @@ class BasicOCRReader:
                     cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
 
             cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
-            if cbd_delta_most_common[1] < 4*cbd_delta_second_most_common[1]:
+            if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
                 logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
                 return None
 
@@ -435,8 +444,6 @@ class BasicOCRReader:
                             continue
                     cbd_fix.append(None)
 
-                print(first_cbd, first_cbd_idx)
-
                 is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
                 for i in range(len(cbd_fix)):
                     n = cbd_fix[i]
@@ -449,8 +456,6 @@ class BasicOCRReader:
                 else:
                     is_sensible = False
 
-                print('is_sensible', is_sensible)
-                    
                 if is_sensible:
                     valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
                     valid_cbd2_num = str(list(filter(None, cbd_fix))[-1]).zfill(4)
@@ -489,9 +494,9 @@ class BasicOCRReader:
 
                     cbd1_final = cbd_final[0]
                     cbd2_final = cbd_final[-1]
-                    
-        except:
-            pass
+
+        except Exception as e:
+            logger.warning(str(e))
             
         ################################################################################ 
         # perform indepth sanity check on time values
@@ -614,8 +619,8 @@ class BasicOCRReader:
                     if time_fixed[0] > 0 and time_fixed[-1] > 0:
                         time_final = time_fixed
                 
-            except:
-                pass
+            except Exception as e:
+                logger.warning(str(e))
 
         ################################################################################
         # gather the data needed for the interpretation
@@ -634,7 +639,7 @@ class BasicOCRReader:
 
         non_space_val = False
         for val in interpretation.values():
-            if not val.isspace() and val != '':
+            if not str(val).isspace() and str(val) != '':
                 non_space_val = True
                 break
         if not non_space_val:
@@ -727,6 +732,7 @@ class BasicOCRReader:
             if space >= 0:
                 spacings.append(space)
 
+                
         kmeans = KMeans(n_clusters=2, random_state=0).fit(np.asarray(spacings).reshape(-1,1))
         letter_spacing = min(kmeans.cluster_centers_)
         word_spacing = max(kmeans.cluster_centers_)

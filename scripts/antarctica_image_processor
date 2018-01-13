@@ -230,8 +230,8 @@ class image_processer:
         #text_detections = self.ocr_reader.find_text(image_data['raster'], preprocessing_metadata, logger)
         try:
             text_detections = self.ocr_reader.find_text(image_data['raster'], preprocessing_metadata, logger)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(str(e))
 
         if text_detections is None:
             logger.warning('Could not find text on the stitched film strip. Skipping batch!')
@@ -248,8 +248,8 @@ class image_processer:
         #interpretation = self.ocr_reader._interpret_text(text_detections, image_data['raster'].shape, logger)
         try:
             interpretation = self.ocr_reader._interpret_text(text_detections, image_data['raster'].shape, logger)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(str(e))
 
         if interpretation is None:
             logger.warning('Could not interpret text on the stitched film strip. Skipping batch!')

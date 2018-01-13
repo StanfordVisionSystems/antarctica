@@ -16,8 +16,8 @@
 # done
 
 
-for reel_num in $(seq 1 1); do
-export REEL=$reel_num && ./antarctica_image_processor --parallel 48 --reel $REEL --flush 1 \
-                                                      --output /mnt/data/jemmons/geophysics/finished.new/reel_$REEL \
-                                                      /mnt/data/jemmons/geophysics/preprocessed/reel_$REEL/*.tiff &> /mnt/data/jemmons/geophysics/finished.new/reel_$REEL.log
+for reel_num in $(seq 1 10); do
+    ./antarctica_image_processor --parallel 24 --reel $reel_num \
+                                 --output /mnt/data/jemmons/geophysics/finished.new/reel_$reel_num \
+                                 /mnt/data/jemmons/geophysics/preprocessed/reel_$reel_num/*.tiff &> /mnt/data/jemmons/geophysics/finished.new/reel_$reel_num.log
 done
