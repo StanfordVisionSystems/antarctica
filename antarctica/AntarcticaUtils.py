@@ -435,7 +435,7 @@ class BasicOCRReader:
                             continue
                     cbd_fix.append(None)
 
-                #print(first_cbd, first_cbd_idx)
+                print(first_cbd, first_cbd_idx)
 
                 is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
                 for i in range(len(cbd_fix)):
@@ -449,7 +449,7 @@ class BasicOCRReader:
                 else:
                     is_sensible = False
 
-                #print('is_sensible', is_sensible)
+                print('is_sensible', is_sensible)
                     
                 if is_sensible:
                     valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
@@ -611,7 +611,8 @@ class BasicOCRReader:
                     is_sensible = False
 
                 if is_sensible:
-                    time_final = time_fixed
+                    if time_fixed[0] > 0 and time_fixed[-1] > 0:
+                        time_final = time_fixed
                 
             except:
                 pass
