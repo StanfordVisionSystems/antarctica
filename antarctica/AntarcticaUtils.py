@@ -339,7 +339,7 @@ class BasicOCRReader:
 
         if top_successes < 5:
             logger.warning('too many errors (< 5 good detections: {}) when parsing the top line; skipping batch!'.format(top_successes))
-            return None
+            #return None
 
         if bottom_successes < 5:
             logger.warning('too many errors (< 5 good detections: {}) when parsing the bottom line; skipping batch!'.format(bottom_successes))
@@ -392,67 +392,94 @@ class BasicOCRReader:
         ################################################################################ 
         # perform indepth sanity check on cbds
         ################################################################################ 
-        cbd_deltas = []
-        for i in range(1, len(cbd_numbers)):
-            if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
-                cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
+        cbd1_final = ''
+        cbd2_final = ''
+        cbd1_fractional = ''
+        cbd2_fractional = ''
 
-        cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
-        if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
-            logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
-            return None
+        try:
+            cbd_deltas = []
+            for i in range(1, len(cbd_numbers)):
+                if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                    cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
 
-        if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
-            logger.warning('invalid cbd_delta (should be -1 or 1, but it was {}); skipping batch!'.format(cbd_delta_most_common[0]))
-            return None
-        
-        cbd_delta_number_final = cbd_delta_most_common[0]
+            cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
+            if cbd_delta_most_common[1] < 4*cbd_delta_second_most_common[1]:
+                logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
+                return None
 
-        # fill in the missing/incorrectly recognized CBDs
-        # TODO(jremmons) confirm that the edits made are correct (i.e. check the residual)
-        cbd_fix = []
-        for i in range(1, len(cbd_numbers)):
-            if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
-                if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
-                    cbd_fix.append(int(cbd_numbers[i-1]))
-                    continue
-            cbd_fix.append(None)
+            else:
 
-        valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
-        valid_cbd2_num = str(list(filter(None, cbd_fix))[-1]).zfill(4)
-        
-        cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
+                # if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
+                #     logger.warning('invalid cbd_delta (should be -1 or 1, but it was {})'.format(cbd_delta_most_common[0]))
+                #     return None
+                # else:
+                    
+                cbd_delta_number_final = cbd_delta_most_common[0]
 
-        valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
-        valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
-        if len(valid_cbd1) > 1:
-            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
+                # fill in the missing/incorrectly recognized CBDs
+                cbd_fix = []
+                first_cbd = None
+                first_cbd_idx = None
+                for i in range(1, len(cbd_numbers)):
+                    if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                        if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
+                            cbd_fix.append(int(cbd_numbers[i-1]))
+                            if first_cbd is None:
+                                first_cbd = int(cbd_numbers[i-1])
+                                first_cbd_idx = i - 1
+                            continue
+                    cbd_fix.append(None)
 
-        if len(valid_cbd2) > 1:
-            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
+                is_sensible = True
+                for i in range(len(cbd_fix)):
+                    n = cbd_fix[i]
+                    if n is not None and int(n) != first_cbd + cbd_delta_number_final * (i - first_cbd_idx):
+                        is_sensible = False
+                        break
+
+                if is_sensible:
+                    valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
+                    valid_cbd2_num = str(list(filter(None, cbd_fix))[-1]).zfill(4)
+
+                    cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
+
+                    valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
+                    valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
+                    if len(valid_cbd1) > 1:
+                        logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
+
+                    if len(valid_cbd2) > 1:
+                        logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
+
+                    valid_cbd1 = valid_cbd1[0]
+                    valid_cbd2 = valid_cbd2[-1]
+
+                    cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
+                    cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
+                    cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
+
+                    cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
+                    cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
+
+                    cbd_first_idx = 0
+                    for i in range(len(cbd_fix)):
+                        if cbd_fix[i] is not None:
+                            cbd_first_idx = i
+                            break
+
+                    for i in range(len(cbd_fix)):
+                        if cbd_fix[i] is None:
+                            cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)                    
+
+                    cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
+
+                    cbd1_final = cbd_final[0]
+                    cbd2_final = cbd_final[-1]
+                    
+        except:
+            pass
             
-        valid_cbd1 = valid_cbd1[0]
-        valid_cbd2 = valid_cbd2[-1]
-
-        cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
-        cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
-        cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
-        
-        cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
-        cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
-        
-        cbd_first_idx = 0
-        for i in range(len(cbd_fix)):
-            if cbd_fix[i] is not None:
-                cbd_first_idx = i
-                break
-
-        for i in range(len(cbd_fix)):
-            if cbd_fix[i] is None:
-                cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)                    
-
-        cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
- 
         ################################################################################ 
         # perform indepth sanity check on time values
         ################################################################################ 
@@ -568,8 +595,8 @@ class BasicOCRReader:
             'time2' : time_final[-1],
             'setting' : setting_number_final,
             'flight' : flight_number_final,
-            'cbd1' : cbd_final[0],
-            'cbd2' : cbd_final[-1],
+            'cbd1' : cbd1_final,
+            'cbd2' : cbd2_final,
             'cbd1_fractional' : cbd1_fractional,
             'cbd2_fractional' : cbd2_fractional
         }
