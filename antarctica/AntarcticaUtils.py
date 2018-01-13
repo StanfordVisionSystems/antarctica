@@ -435,13 +435,22 @@ class BasicOCRReader:
                             continue
                     cbd_fix.append(None)
 
-                is_sensible = True
+                #print(first_cbd, first_cbd_idx)
+
+                is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
                 for i in range(len(cbd_fix)):
                     n = cbd_fix[i]
+                    #print(n, first_cbd + cbd_delta_number_final * (i - first_cbd_idx))
                     if n is not None and int(n) != first_cbd + cbd_delta_number_final * (i - first_cbd_idx):
-                        is_sensible = False
-                        break
+                        is_sensible -= 1
 
+                if is_sensible >= 0:
+                    is_sensible = True
+                else:
+                    is_sensible = False
+
+                #print('is_sensible', is_sensible)
+                    
                 if is_sensible:
                     valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
                     valid_cbd2_num = str(list(filter(None, cbd_fix))[-1]).zfill(4)
@@ -575,6 +584,8 @@ class BasicOCRReader:
                             continue
                     time_fix.append(None)
 
+                is_sensible = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
+                    
                 time_first_idx = 0
                 for i in range(len(time_fix)):
                     if time_fix[i] is not None:
@@ -584,17 +595,20 @@ class BasicOCRReader:
                 for i in range(len(time_fix)):
                     if time_fix[i] is None:
                         time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
-
                         
                 time_fixed = list(map(str, map(sec2time, time_fix)))
                 first_time = time_fix[time_first_idx]
                 first_time_idx = time_first_idx
-                is_sensible = True
                 for i in range(len(time_fixed)):
                     n = time_fixed[i]
                     if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
                         is_sensible = False
                         break
+
+                if is_sensible >= 0:
+                    is_sensible = True
+                else:
+                    is_sensible = False
 
                 if is_sensible:
                     time_final = time_fixed
@@ -616,7 +630,15 @@ class BasicOCRReader:
             'cbd1_fractional' : cbd1_fractional,
             'cbd2_fractional' : cbd2_fractional
         }
-        
+
+        non_space_val = False
+        for val in interpretation.values():
+            if not val.isspace() and val != '':
+                non_space_val = True
+                break
+        if not non_space_val:
+            return None
+            
         return interpretation, number_groups
             
     def _hog_OCR(self, char, logger):
