@@ -6,6 +6,7 @@ import pyocr
 import pyocr.builders
 import numpy as np
 import scipy.ndimage
+import sys
 
 from skimage.feature import hog
 from sklearn.svm import LinearSVC
@@ -372,7 +373,7 @@ class BasicOCRReader:
                 if date_number_final is None:
                     date_number_final = ''
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('parsing date number expcetion: ' + str(e))
 
         setting_number_final = ''
         try:
@@ -386,7 +387,7 @@ class BasicOCRReader:
                     setting_number_final = ''
 
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('parsing setting number expcetion: ' + str(e))
 
         flight_number_final = ''
         try:    
@@ -400,7 +401,7 @@ class BasicOCRReader:
                     flight_number_final = ''
 
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('parsing flight number expcetion: ' + str(e))
         
         ################################################################################ 
         # perform indepth sanity check on cbds
@@ -496,7 +497,7 @@ class BasicOCRReader:
                     cbd2_final = cbd_final[-1]
 
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('parsing cbd exception: ' + str(e))
             
         ################################################################################ 
         # perform indepth sanity check on time values
@@ -591,36 +592,41 @@ class BasicOCRReader:
 
                 is_sensible = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
                     
-                time_first_idx = 0
+                time_first_idx = None
                 for i in range(len(time_fix)):
                     if time_fix[i] is not None:
                         time_first_idx = i
                         break
 
-                for i in range(len(time_fix)):
-                    if time_fix[i] is None:
-                        time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
-                        
-                time_fixed = list(map(str, map(sec2time, time_fix)))
-                first_time = time_fix[time_first_idx]
-                first_time_idx = time_first_idx
-                for i in range(len(time_fixed)):
-                    n = time_fixed[i]
-                    if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
+                if time_first_idx is not None:
+
+                    for i in range(len(time_fix)):
+                        if time_fix[i] is None:
+                            time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
+
+                    time_fixed = list(map(str, map(sec2time, time_fix)))
+                    first_time = time_fix[time_first_idx]
+                    first_time_idx = time_first_idx
+                    for i in range(len(time_fixed)):
+                        n = time_fixed[i]
+                        if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
+                            is_sensible = False
+                            break
+
+                    if is_sensible >= 0:
+                        is_sensible = True
+                    else:
                         is_sensible = False
-                        break
 
-                if is_sensible >= 0:
-                    is_sensible = True
-                else:
-                    is_sensible = False
-
-                if is_sensible:
-                    if time_fixed[0] > 0 and time_fixed[-1] > 0:
-                        time_final = time_fixed
+                    if is_sensible:
+                        if time_fixed[0] > 0 and time_fixed[-1] > 0:
+                            time_final = time_fixed
                 
             except Exception as e:
-                logger.warning(str(e))
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                logger.warning(str(exc_type) + str(fname) + 'line_number:' + str(exc_tb.tb_lineno))
+                logger.warning('parsing time exception: ' +  str(e))
 
         ################################################################################
         # gather the data needed for the interpretation
@@ -643,6 +649,7 @@ class BasicOCRReader:
                 non_space_val = True
                 break
         if not non_space_val:
+            logger.warning('none of the fields in the interpertation could be filled in, giving up!')
             return None
             
         return interpretation, number_groups
