@@ -426,97 +426,96 @@ class BasicOCRReader:
                 cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
                 if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
                     logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
-
+                    
                 else:
 
-                    # if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
-                    #     logger.warning('invalid cbd_delta (should be -1 or 1, but it was {})'.format(cbd_delta_most_common[0]))
-                    #     return None
-                    # else:
+                    if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
+                        logger.warning('invalid cbd_delta (should be -1 or 1, but it was {})'.format(cbd_delta_most_common[0]))
+                    else:
 
-                    cbd_delta_number_final = cbd_delta_most_common[0]
+                        cbd_delta_number_final = cbd_delta_most_common[0]
 
-                    # fill in the missing/incorrectly recognized CBDs
-                    cbd_fix = []
-                    first_cbd = []
-                    first_cbd_idx = []
-                    last_good = False
-                    for i in range(1, len(cbd_numbers)+1):
-                        if i < len(cbd_numbers) and  cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
-                            if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
+                        # fill in the missing/incorrectly recognized CBDs
+                        cbd_fix = []
+                        first_cbd = []
+                        first_cbd_idx = []
+                        last_good = False
+                        for i in range(1, len(cbd_numbers)+1):
+                            if i < len(cbd_numbers) and  cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                                if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
+                                    cbd_fix.append(int(cbd_numbers[i-1]))
+                                    first_cbd.append(int(cbd_numbers[i-1]))
+                                    first_cbd_idx.append(i - 1)
+                                    last_good = True
+                                    continue
+
+                            if cbd_numbers[i-1] is not None and last_good:
                                 cbd_fix.append(int(cbd_numbers[i-1]))
                                 first_cbd.append(int(cbd_numbers[i-1]))
                                 first_cbd_idx.append(i - 1)
-                                last_good = True
+                                last_good = False
                                 continue
 
-                        if cbd_numbers[i-1] is not None and last_good:
-                            cbd_fix.append(int(cbd_numbers[i-1]))
-                            first_cbd.append(int(cbd_numbers[i-1]))
-                            first_cbd_idx.append(i - 1)
+                            cbd_fix.append(None)
                             last_good = False
-                            continue
 
-                        cbd_fix.append(None)
-                        last_good = False
-
-                    valid_cbds = []
-                    for cbd_, cbd_idx_ in zip(first_cbd, first_cbd_idx):
-                        is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
                         valid_cbds = []
-                        for i in range(len(cbd_fix)):
-                            n = cbd_fix[i]
-                            if n is not None and int(n) != cbd_ + cbd_delta_number_final * (i - cbd_idx_):
-                                is_sensible -= 1
-                            elif n is not None: 
-                                valid_cbds.append(str(n).zfill(4))
+                        for cbd_, cbd_idx_ in zip(first_cbd, first_cbd_idx):
+                            is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
+                            valid_cbds = []
+                            for i in range(len(cbd_fix)):
+                                n = cbd_fix[i]
+                                if n is not None and int(n) != cbd_ + cbd_delta_number_final * (i - cbd_idx_):
+                                    is_sensible -= 1
+                                elif n is not None: 
+                                    valid_cbds.append(str(n).zfill(4))
 
-                        if is_sensible >= 0:
-                            is_sensible = True
-                            first_cbd_ = cbd_
-                            first_cbd_idx_ = cbd_idx_
-                            break
-                        else:
-                            is_sensible = False
-
-                    if is_sensible and len(valid_cbds) >= 2:
-                        cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
-                        cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
-
-                        valid_cbd1_num = valid_cbds[0]
-                        valid_cbd2_num = valid_cbds[-1]
-
-                        cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
-
-                        valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
-                        valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
-                        if len(valid_cbd1) > 1:
-                            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
-
-                        if len(valid_cbd2) > 1:
-                            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
-
-                        valid_cbd1 = valid_cbd1[0]
-                        valid_cbd2 = valid_cbd2[-1]
-
-                        cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
-                        cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
-                        cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
-
-                        cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
-                        cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
-
-                        cbd_first_idx = 0
-                        for i in range(len(cbd_fix)):
-                            if cbd_fix[i] is not None:
-                                cbd_first_idx = i
+                            if is_sensible >= 0:
+                                is_sensible = True
+                                first_cbd_ = cbd_
+                                first_cbd_idx_ = cbd_idx_
                                 break
+                            else:
+                                is_sensible = False
 
-                        for i in range(len(cbd_fix)):
-                            if cbd_fix[i] is None:
-                                cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
+                        if is_sensible and len(valid_cbds) >= 2:
+                            cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
+                            cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
 
-                        cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
+                            valid_cbd1_num = valid_cbds[0]
+                            valid_cbd2_num = valid_cbds[-1]
+
+                            cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
+
+                            valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
+                            valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
+                            if len(valid_cbd1) > 1:
+                                logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
+
+                            if len(valid_cbd2) > 1:
+                                logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
+
+                            valid_cbd1 = valid_cbd1[0]
+                            valid_cbd2 = valid_cbd2[-1]
+
+                            cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
+                            cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
+                            cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
+
+                            cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
+                            cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
+
+                            cbd_first_idx = 0
+                            for i in range(len(cbd_fix)):
+                                if cbd_fix[i] is not None:
+                                    cbd_first_idx = i
+                                    break
+
+                            for i in range(len(cbd_fix)):
+                                if cbd_fix[i] is None:
+                                    cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
+
+                            cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
 
 
         except Exception as e:
