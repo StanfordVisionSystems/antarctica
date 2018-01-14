@@ -483,7 +483,6 @@ class BasicOCRReader:
                         cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
                         cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
 
-                        print(valid_cbds)
                         valid_cbd1_num = valid_cbds[0]
                         valid_cbd2_num = valid_cbds[-1]
 
