@@ -479,7 +479,7 @@ class BasicOCRReader:
                         else:
                             is_sensible = False
 
-                    if is_sensible:
+                    if is_sensible and len(valid_cbds) >= 2:
                         cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
                         cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
 
@@ -614,14 +614,14 @@ class BasicOCRReader:
                                 continue
                         time_fix.append(None)
 
-                    is_sensible_ = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
+                    is_sensible_ = len(list(filter(None, time_fix))) // 3 # at least 2/3 must be in agreement
 
                     time_first_idx = []
                     for i in range(len(time_fix)):
                         if time_fix[i] is not None:
                             time_first_idx.append(i)
 
-                    if time_first_idx:
+                    if time_first_idx and len(list(filter(None, time_fix))) >= 3:
 
                         is_sensible = is_sensible_
                         for t in time_first_idx:
