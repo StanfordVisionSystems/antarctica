@@ -441,8 +441,8 @@ class BasicOCRReader:
                     first_cbd = []
                     first_cbd_idx = []
                     last_good = False
-                    for i in range(1, len(cbd_numbers)):
-                        if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                    for i in range(1, len(cbd_numbers)+1):
+                        if i < len(cbd_numbers) and  cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
                             if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
                                 cbd_fix.append(int(cbd_numbers[i-1]))
                                 first_cbd.append(int(cbd_numbers[i-1]))
@@ -462,9 +462,7 @@ class BasicOCRReader:
 
                     valid_cbds = []
                     for cbd_, cbd_idx_ in zip(first_cbd, first_cbd_idx):
-                        print(cbd_, cbd_idx_)
                         is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
-
                         valid_cbds = []
                         for i in range(len(cbd_fix)):
                             n = cbd_fix[i]
