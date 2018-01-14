@@ -770,7 +770,6 @@ class BasicOCRReader:
             if space >= 0:
                 spacings.append(space)
 
-                
         kmeans = KMeans(n_clusters=2, random_state=0).fit(np.asarray(spacings).reshape(-1,1))
         letter_spacing = min(kmeans.cluster_centers_)
         word_spacing = max(kmeans.cluster_centers_)
