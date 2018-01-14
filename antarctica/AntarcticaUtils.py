@@ -364,7 +364,7 @@ class BasicOCRReader:
 
         date_number_final = ''
         try:
-            date_most_common, date_second_most_common = interpert_constants(date_numbers)
+            date_most_common, date_second_most_common = interpert_constants(list(filter(None,date_numbers)))
             if date_most_common[1] < 2*date_second_most_common[1]:
                 logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
                 #return None
@@ -377,7 +377,7 @@ class BasicOCRReader:
 
         setting_number_final = ''
         try:
-            setting_most_common, setting_second_most_common = interpert_constants(setting_numbers)
+            setting_most_common, setting_second_most_common = interpert_constants(list(filter(None,setting_numbers)))
             if setting_most_common[1] < 2*setting_second_most_common[1]:
                 logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
                 #return None
@@ -391,7 +391,7 @@ class BasicOCRReader:
 
         flight_number_final = ''
         try:    
-            flight_most_common, flight_second_most_common = interpert_constants(flight_numbers)
+            flight_most_common, flight_second_most_common = interpert_constants(list(filter(None,flight_numbers)))
             if flight_most_common[1] < 2*flight_second_most_common[1]:
                 logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
                 #return None
@@ -420,7 +420,6 @@ class BasicOCRReader:
             cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
             if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
                 logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
-                return None
 
             else:
 
@@ -433,33 +432,56 @@ class BasicOCRReader:
 
                 # fill in the missing/incorrectly recognized CBDs
                 cbd_fix = []
-                first_cbd = None
-                first_cbd_idx = None
+                first_cbd = []
+                first_cbd_idx = []
+                last_good = False
                 for i in range(1, len(cbd_numbers)):
                     if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
                         if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
                             cbd_fix.append(int(cbd_numbers[i-1]))
-                            if first_cbd is None:
-                                first_cbd = int(cbd_numbers[i-1])
-                                first_cbd_idx = i - 1
+                            first_cbd.append(int(cbd_numbers[i-1]))
+                            first_cbd_idx.append(i - 1)
+                            last_good = True
                             continue
+
+                    if cbd_numbers[i-1] is not None and last_good:
+                        cbd_fix.append(int(cbd_numbers[i-1]))
+                        first_cbd.append(int(cbd_numbers[i-1]))
+                        first_cbd_idx.append(i - 1)
+                        last_good = False
+                        continue
+                        
                     cbd_fix.append(None)
+                    last_good = False
 
-                is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
-                for i in range(len(cbd_fix)):
-                    n = cbd_fix[i]
-                    #print(n, first_cbd + cbd_delta_number_final * (i - first_cbd_idx))
-                    if n is not None and int(n) != first_cbd + cbd_delta_number_final * (i - first_cbd_idx):
-                        is_sensible -= 1
+                valid_cbds = []
+                for cbd_, cbd_idx_ in zip(first_cbd, first_cbd_idx):
+                    print(cbd_, cbd_idx_)
+                    is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
 
-                if is_sensible >= 0:
-                    is_sensible = True
-                else:
-                    is_sensible = False
-
+                    valid_cbds = []
+                    for i in range(len(cbd_fix)):
+                        n = cbd_fix[i]
+                        if n is not None and int(n) != cbd_ + cbd_delta_number_final * (i - cbd_idx_):
+                            is_sensible -= 1
+                        elif n is not None: 
+                            valid_cbds.append(str(n).zfill(4))
+                            
+                    if is_sensible >= 0:
+                        is_sensible = True
+                        first_cbd_ = cbd_
+                        first_cbd_idx_ = cbd_idx_
+                        break
+                    else:
+                        is_sensible = False
+                        
                 if is_sensible:
-                    valid_cbd1_num = str(list(filter(None, cbd_fix))[0]).zfill(4)
-                    valid_cbd2_num = str(list(filter(None, cbd_fix))[-1]).zfill(4)
+                    cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
+                    cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
+
+                    print(valid_cbds)
+                    valid_cbd1_num = valid_cbds[0]
+                    valid_cbd2_num = valid_cbds[-1]
 
                     cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
 
@@ -489,14 +511,15 @@ class BasicOCRReader:
 
                     for i in range(len(cbd_fix)):
                         if cbd_fix[i] is None:
-                            cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)                    
+                            cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
 
                     cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
 
-                    cbd1_final = cbd_final[0]
-                    cbd2_final = cbd_final[-1]
 
         except Exception as e:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            logger.warning(str(exc_type) + str(fname) + 'line_number:' + str(exc_tb.tb_lineno))
             logger.warning('parsing cbd exception: ' + str(e))
             
         ################################################################################ 
@@ -551,10 +574,7 @@ class BasicOCRReader:
             return str(hour).zfill(2) + str(minute).zfill(2) + str(second).zfill(2)
             
         # fix the missing/incorrectly recognized time values        
-        
         time_numbers_seconds = list(map(time2sec, map(time_sanity_check, time_numbers)))
-
-        # TODO(jremmons) make sure there are enough time values to 
 
         time_deltas = []
         for i in range(1, len(time_numbers_seconds)):
@@ -569,7 +589,7 @@ class BasicOCRReader:
             # return None
         else:
             time_delta_number_final = time_delta_most_common[0]
-
+                
         # if time_delta_most_common[0] != 15 and time_delta_most_common[0] != -15: 
         #     logger.warning('invalid time_delta (should be -15 or 15, but it was {}); skipping batch!'.format(time_delta_most_common[0]))
         #     return None
@@ -590,44 +610,50 @@ class BasicOCRReader:
                             continue
                     time_fix.append(None)
 
-                is_sensible = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
+                is_sensible_ = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
                     
-                time_first_idx = None
+                time_first_idx = []
                 for i in range(len(time_fix)):
                     if time_fix[i] is not None:
-                        time_first_idx = i
-                        break
+                        time_first_idx.append(i)
 
-                if time_first_idx is not None:
+                if time_first_idx:
 
-                    for i in range(len(time_fix)):
-                        if time_fix[i] is None:
-                            time_fix[i] = time_fix[time_first_idx] + time_delta_number_final * (i - time_first_idx)
+                    is_sensible = is_sensible_
+                    for t in time_first_idx:
+                        for i in range(len(time_fix)):
+                            if time_fix[i] is None:
+                                time_fix[i] = time_fix[t] + time_delta_number_final * (i - t)
 
-                    time_fixed = list(map(str, map(sec2time, time_fix)))
-                    first_time = time_fix[time_first_idx]
-                    first_time_idx = time_first_idx
-                    for i in range(len(time_fixed)):
-                        n = time_fixed[i]
-                        if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
+                        time_fixed = list(map(str, map(sec2time, time_fix)))
+                        first_time = time_fix[t]
+                        first_time_idx = t
+                        for i in range(len(time_fixed)):
+                            n = time_fixed[i]
+                            if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
+                                is_sensible -= 1
+                                break
+
+                        if is_sensible >= 0:
+                            is_sensible = True
+                        else:
                             is_sensible = False
-                            break
 
-                    if is_sensible >= 0:
-                        is_sensible = True
-                    else:
-                        is_sensible = False
-
-                    if is_sensible:
-                        if time_fixed[0] > 0 and time_fixed[-1] > 0:
-                            time_final = time_fixed
-                
+                        if is_sensible:
+                            if int(time_fixed[0]) > 0 and int(time_fixed[-1]) > 0:
+                                time_final = time_fixed
+                                break
+                else:
+                    logger.warning('all time values are None, {}'.format(time_fix))
+                    
             except Exception as e:
                 exc_type, exc_obj, exc_tb = sys.exc_info()
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 logger.warning(str(exc_type) + str(fname) + 'line_number:' + str(exc_tb.tb_lineno))
                 logger.warning('parsing time exception: ' +  str(e))
-
+        else:
+            logger.warning('time_delta is None! time_delta_number_final:{}'.format(time_delta_number_final))
+            
         ################################################################################
         # gather the data needed for the interpretation
         ################################################################################
