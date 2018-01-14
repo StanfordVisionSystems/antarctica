@@ -336,13 +336,15 @@ class BasicOCRReader:
         # perform sanity check to ensure enough digits were parsed from the film
         ################################################################################ 
 
-        if top_successes < 5:
-            logger.warning('too many errors (< 5 good detections: {}) when parsing the top line'.format(top_successes))
-            #return None
+        skip_top_line = False
+        if top_successes < 3:
+            logger.warning('too many errors (< 3 good detections: {}) when parsing the top line'.format(top_successes))
+            skip_top_line = True
 
-        if bottom_successes < 5:
-            logger.warning('too many errors (< 5 good detections: {}) when parsing the bottom line'.format(bottom_successes))
-            #return None
+        skip_bot_line = False
+        if bottom_successes < 3:
+            logger.warning('too many errors (< 3 good detections: {}) when parsing the bottom line'.format(bottom_successes))
+            skip_bot_line = True
 
         ################################################################################ 
         # perform semantic sanity check on the "constant" digits from each segment
@@ -364,41 +366,44 @@ class BasicOCRReader:
 
         date_number_final = ''
         try:
-            date_most_common, date_second_most_common = interpert_constants(list(filter(None,date_numbers)))
-            if date_most_common[1] < 2*date_second_most_common[1]:
-                logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
-                #return None
-            else:
-                date_number_final = date_most_common[0]
-                if date_number_final is None:
-                    date_number_final = ''
+            if not skip_top_line:
+                date_most_common, date_second_most_common = interpert_constants(list(filter(lambda x: '?' not in x, filter(None,date_numbers))))
+                if date_most_common[1] < 2*date_second_most_common[1]:
+                    logger.warning('too many errors (>25%) when interperting the date; skipping batch!')
+                    #return None
+                else:
+                    date_number_final = date_most_common[0]
+                    if date_number_final is None:
+                        date_number_final = ''
         except Exception as e:
             logger.warning('parsing date number expcetion: ' + str(e))
 
         setting_number_final = ''
         try:
-            setting_most_common, setting_second_most_common = interpert_constants(list(filter(None,setting_numbers)))
-            if setting_most_common[1] < 2*setting_second_most_common[1]:
-                logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
-                #return None
-            else:
-                setting_number_final = setting_most_common[0]
-                if setting_number_final is None:
-                    setting_number_final = ''
+            if not skip_bot_line:
+                setting_most_common, setting_second_most_common = interpert_constants(list(filter(lambda x: '?' not in x, filter(None,setting_numbers))))
+                if setting_most_common[1] < 2*setting_second_most_common[1]:
+                    logger.warning('too many errors (>25%) when interperting the setting; skipping batch!')
+                    #return None
+                else:
+                    setting_number_final = setting_most_common[0]
+                    if setting_number_final is None:
+                        setting_number_final = ''
 
         except Exception as e:
             logger.warning('parsing setting number expcetion: ' + str(e))
 
         flight_number_final = ''
         try:    
-            flight_most_common, flight_second_most_common = interpert_constants(list(filter(None,flight_numbers)))
-            if flight_most_common[1] < 2*flight_second_most_common[1]:
-                logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
-                #return None
-            else:
-                flight_number_final = flight_most_common[0]
-                if flight_number_final is None:
-                    flight_number_final = ''
+            if not skip_bot_line:
+                flight_most_common, flight_second_most_common = interpert_constants(list(filter(lambda x: '?' not in x, filter(None,flight_numbers))))
+                if flight_most_common[1] < 2*flight_second_most_common[1]:
+                    logger.warning('too many errors (>25%) when interperting the flight; skipping batch!')
+                    #return None
+                else:
+                    flight_number_final = flight_most_common[0]
+                    if flight_number_final is None:
+                        flight_number_final = ''
 
         except Exception as e:
             logger.warning('parsing flight number expcetion: ' + str(e))
@@ -412,108 +417,109 @@ class BasicOCRReader:
         cbd2_fractional = ''
 
         try:
-            cbd_deltas = []
-            for i in range(1, len(cbd_numbers)):
-                if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
-                    cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
-
-            cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
-            if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
-                logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
-
-            else:
-
-                # if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
-                #     logger.warning('invalid cbd_delta (should be -1 or 1, but it was {})'.format(cbd_delta_most_common[0]))
-                #     return None
-                # else:
-                    
-                cbd_delta_number_final = cbd_delta_most_common[0]
-
-                # fill in the missing/incorrectly recognized CBDs
-                cbd_fix = []
-                first_cbd = []
-                first_cbd_idx = []
-                last_good = False
+            if not skip_bot_line:
+                cbd_deltas = []
                 for i in range(1, len(cbd_numbers)):
                     if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
-                        if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
+                        cbd_deltas.append(int(cbd_numbers[i]) - int(cbd_numbers[i-1]))
+
+                cbd_delta_most_common, cbd_delta_second_most_common = interpert_constants(cbd_deltas)
+                if cbd_delta_most_common[1] < 2*cbd_delta_second_most_common[1]:
+                    logger.warning('too many errors (>25%) when interperting the cbd_delta (cbd:count, {}:{}, {}:{}); skipping batch!'.format(cbd_delta_most_common[0], cbd_delta_most_common[1], cbd_delta_second_most_common[0], cbd_delta_second_most_common[1]))
+
+                else:
+
+                    # if cbd_delta_most_common[0] != 1 and cbd_delta_most_common[0] != -1: 
+                    #     logger.warning('invalid cbd_delta (should be -1 or 1, but it was {})'.format(cbd_delta_most_common[0]))
+                    #     return None
+                    # else:
+
+                    cbd_delta_number_final = cbd_delta_most_common[0]
+
+                    # fill in the missing/incorrectly recognized CBDs
+                    cbd_fix = []
+                    first_cbd = []
+                    first_cbd_idx = []
+                    last_good = False
+                    for i in range(1, len(cbd_numbers)):
+                        if cbd_numbers[i-1] is not None and cbd_numbers[i] is not None:
+                            if int(cbd_numbers[i]) - int(cbd_numbers[i-1]) == cbd_delta_number_final:
+                                cbd_fix.append(int(cbd_numbers[i-1]))
+                                first_cbd.append(int(cbd_numbers[i-1]))
+                                first_cbd_idx.append(i - 1)
+                                last_good = True
+                                continue
+
+                        if cbd_numbers[i-1] is not None and last_good:
                             cbd_fix.append(int(cbd_numbers[i-1]))
                             first_cbd.append(int(cbd_numbers[i-1]))
                             first_cbd_idx.append(i - 1)
-                            last_good = True
+                            last_good = False
                             continue
 
-                    if cbd_numbers[i-1] is not None and last_good:
-                        cbd_fix.append(int(cbd_numbers[i-1]))
-                        first_cbd.append(int(cbd_numbers[i-1]))
-                        first_cbd_idx.append(i - 1)
+                        cbd_fix.append(None)
                         last_good = False
-                        continue
-                        
-                    cbd_fix.append(None)
-                    last_good = False
-
-                valid_cbds = []
-                for cbd_, cbd_idx_ in zip(first_cbd, first_cbd_idx):
-                    print(cbd_, cbd_idx_)
-                    is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
 
                     valid_cbds = []
-                    for i in range(len(cbd_fix)):
-                        n = cbd_fix[i]
-                        if n is not None and int(n) != cbd_ + cbd_delta_number_final * (i - cbd_idx_):
-                            is_sensible -= 1
-                        elif n is not None: 
-                            valid_cbds.append(str(n).zfill(4))
-                            
-                    if is_sensible >= 0:
-                        is_sensible = True
-                        first_cbd_ = cbd_
-                        first_cbd_idx_ = cbd_idx_
-                        break
-                    else:
-                        is_sensible = False
-                        
-                if is_sensible:
-                    cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
-                    cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
+                    for cbd_, cbd_idx_ in zip(first_cbd, first_cbd_idx):
+                        print(cbd_, cbd_idx_)
+                        is_sensible = len(list(filter(None, cbd_fix))) / 3 # at least 2/3 must be in agreement
 
-                    print(valid_cbds)
-                    valid_cbd1_num = valid_cbds[0]
-                    valid_cbd2_num = valid_cbds[-1]
+                        valid_cbds = []
+                        for i in range(len(cbd_fix)):
+                            n = cbd_fix[i]
+                            if n is not None and int(n) != cbd_ + cbd_delta_number_final * (i - cbd_idx_):
+                                is_sensible -= 1
+                            elif n is not None: 
+                                valid_cbds.append(str(n).zfill(4))
 
-                    cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
-
-                    valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
-                    valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
-                    if len(valid_cbd1) > 1:
-                        logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
-
-                    if len(valid_cbd2) > 1:
-                        logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
-
-                    valid_cbd1 = valid_cbd1[0]
-                    valid_cbd2 = valid_cbd2[-1]
-
-                    cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
-                    cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
-                    cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
-
-                    cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
-                    cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
-
-                    cbd_first_idx = 0
-                    for i in range(len(cbd_fix)):
-                        if cbd_fix[i] is not None:
-                            cbd_first_idx = i
+                        if is_sensible >= 0:
+                            is_sensible = True
+                            first_cbd_ = cbd_
+                            first_cbd_idx_ = cbd_idx_
                             break
+                        else:
+                            is_sensible = False
 
-                    for i in range(len(cbd_fix)):
-                        if cbd_fix[i] is None:
-                            cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
+                    if is_sensible:
+                        cbd1_final = first_cbd_ + cbd_delta_number_final * (0 - first_cbd_idx_)
+                        cbd2_final = first_cbd_ + cbd_delta_number_final * (len(cbd_fix) - first_cbd_idx_ - 1)
 
-                    cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
+                        print(valid_cbds)
+                        valid_cbd1_num = valid_cbds[0]
+                        valid_cbd2_num = valid_cbds[-1]
+
+                        cbds_numbers = list(filter(lambda x: x['number_type'] == 'cbd', number_groups))
+
+                        valid_cbd1 = list(filter(lambda x: x['chars'] == valid_cbd1_num, cbds_numbers))
+                        valid_cbd2 = list(filter(lambda x: x['chars'] == valid_cbd2_num, cbds_numbers))
+                        if len(valid_cbd1) > 1:
+                            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd1_num, len(valid_cbd1)))
+
+                        if len(valid_cbd2) > 1:
+                            logger.warning('multiple cbds with the same value detected: cbd={} count={}'.format(valid_cbd2_num, len(valid_cbd2)))
+
+                        valid_cbd1 = valid_cbd1[0]
+                        valid_cbd2 = valid_cbd2[-1]
+
+                        cbd1_fractional_mid = (int(valid_cbd1['xmin']) + int(valid_cbd1['xmax'])) / 2
+                        cbd2_fractional_mid = (int(valid_cbd2['xmin']) + int(valid_cbd2['xmax'])) / 2
+                        cbd_grad = (int(valid_cbd1['chars']) - int(valid_cbd2['chars'])) / (cbd1_fractional_mid - cbd2_fractional_mid)
+
+                        cbd1_fractional = cbd_grad * (0 - cbd1_fractional_mid) + int(valid_cbd1['chars'])
+                        cbd2_fractional = cbd_grad * (w - cbd2_fractional_mid) + int(valid_cbd2['chars'])
+
+                        cbd_first_idx = 0
+                        for i in range(len(cbd_fix)):
+                            if cbd_fix[i] is not None:
+                                cbd_first_idx = i
+                                break
+
+                        for i in range(len(cbd_fix)):
+                            if cbd_fix[i] is None:
+                                cbd_fix[i] = cbd_fix[cbd_first_idx] + cbd_delta_number_final * (i - cbd_first_idx)
+
+                        cbd_final = list(map(lambda x : str(x).zfill(4), cbd_fix))
 
 
         except Exception as e:
@@ -574,85 +580,86 @@ class BasicOCRReader:
             return str(hour).zfill(2) + str(minute).zfill(2) + str(second).zfill(2)
             
         # fix the missing/incorrectly recognized time values        
-        time_numbers_seconds = list(map(time2sec, map(time_sanity_check, time_numbers)))
-
-        time_deltas = []
-        for i in range(1, len(time_numbers_seconds)):
-            if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
-                time_deltas.append(int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]))
-
-        time_delta_number_final = None
-        
-        time_delta_most_common, time_delta_second_most_common = interpert_constants(time_deltas)
-        if time_delta_most_common[1] < 2*time_delta_second_most_common[1]:
-            logger.warning('too many errors (>25%) when interperting the time_delta; skipping batch!')
-            # return None
-        else:
-            time_delta_number_final = time_delta_most_common[0]
-                
-        # if time_delta_most_common[0] != 15 and time_delta_most_common[0] != -15: 
-        #     logger.warning('invalid time_delta (should be -15 or 15, but it was {}); skipping batch!'.format(time_delta_most_common[0]))
-        #     return None
-        
-        #time_delta_number_final = time_delta_most_common[0]
-
-        # fill in the missing/incorrectly recognized TIMEs
-        # TODO(jremmons) confirm that the edits made are correct (i.e. check the residual)
-
         time_final = ['', '']
-        if time_delta_number_final is not None:
-            try:
-                time_fix = []
-                for i in range(1, len(time_numbers_seconds)):
-                    if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
-                        if int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]) == time_delta_number_final:
-                            time_fix.append(int(time_numbers_seconds[i-1]))
-                            continue
-                    time_fix.append(None)
+        if not skip_top_line:
+            time_numbers_seconds = list(map(time2sec, map(time_sanity_check, time_numbers)))
 
-                is_sensible_ = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
-                    
-                time_first_idx = []
-                for i in range(len(time_fix)):
-                    if time_fix[i] is not None:
-                        time_first_idx.append(i)
+            time_deltas = []
+            for i in range(1, len(time_numbers_seconds)):
+                if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
+                    time_deltas.append(int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]))
 
-                if time_first_idx:
+            time_delta_number_final = None
 
-                    is_sensible = is_sensible_
-                    for t in time_first_idx:
-                        for i in range(len(time_fix)):
-                            if time_fix[i] is None:
-                                time_fix[i] = time_fix[t] + time_delta_number_final * (i - t)
+            time_delta_most_common, time_delta_second_most_common = interpert_constants(time_deltas)
+            if time_delta_most_common[1] < 2*time_delta_second_most_common[1]:
+                logger.warning('too many errors (>25%) when interperting the time_delta; skipping batch!')
+                # return None
+            else:
+                time_delta_number_final = time_delta_most_common[0]
 
-                        time_fixed = list(map(str, map(sec2time, time_fix)))
-                        first_time = time_fix[t]
-                        first_time_idx = t
-                        for i in range(len(time_fixed)):
-                            n = time_fixed[i]
-                            if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
-                                is_sensible -= 1
-                                break
+            # if time_delta_most_common[0] != 15 and time_delta_most_common[0] != -15: 
+            #     logger.warning('invalid time_delta (should be -15 or 15, but it was {}); skipping batch!'.format(time_delta_most_common[0]))
+            #     return None
 
-                        if is_sensible >= 0:
-                            is_sensible = True
-                        else:
-                            is_sensible = False
+            #time_delta_number_final = time_delta_most_common[0]
 
-                        if is_sensible:
-                            if int(time_fixed[0]) > 0 and int(time_fixed[-1]) > 0:
-                                time_final = time_fixed
-                                break
-                else:
-                    logger.warning('all time values are None, {}'.format(time_fix))
-                    
-            except Exception as e:
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                logger.warning(str(exc_type) + str(fname) + 'line_number:' + str(exc_tb.tb_lineno))
-                logger.warning('parsing time exception: ' +  str(e))
-        else:
-            logger.warning('time_delta is None! time_delta_number_final:{}'.format(time_delta_number_final))
+            # fill in the missing/incorrectly recognized TIMEs
+            # TODO(jremmons) confirm that the edits made are correct (i.e. check the residual)
+
+            if time_delta_number_final is not None:
+                try:
+                    time_fix = []
+                    for i in range(1, len(time_numbers_seconds)):
+                        if time_numbers_seconds[i-1] is not None and time_numbers_seconds[i] is not None:
+                            if int(time_numbers_seconds[i]) - int(time_numbers_seconds[i-1]) == time_delta_number_final:
+                                time_fix.append(int(time_numbers_seconds[i-1]))
+                                continue
+                        time_fix.append(None)
+
+                    is_sensible_ = len(list(filter(None, time_fix))) / 3 # at least 2/3 must be in agreement
+
+                    time_first_idx = []
+                    for i in range(len(time_fix)):
+                        if time_fix[i] is not None:
+                            time_first_idx.append(i)
+
+                    if time_first_idx:
+
+                        is_sensible = is_sensible_
+                        for t in time_first_idx:
+                            for i in range(len(time_fix)):
+                                if time_fix[i] is None:
+                                    time_fix[i] = time_fix[t] + time_delta_number_final * (i - t)
+
+                            time_fixed = list(map(str, map(sec2time, time_fix)))
+                            first_time = time_fix[t]
+                            first_time_idx = t
+                            for i in range(len(time_fixed)):
+                                n = time_fixed[i]
+                                if n is not None and int(n) != first_time + time_delta_number_final * (i - first_time_idx):
+                                    is_sensible -= 1
+                                    break
+
+                            if is_sensible >= 0:
+                                is_sensible = True
+                            else:
+                                is_sensible = False
+
+                            if is_sensible:
+                                if int(time_fixed[0]) > 0 and int(time_fixed[-1]) > 0:
+                                    time_final = time_fixed
+                                    break
+                    else:
+                        logger.warning('all time values are None, {}'.format(time_fix))
+
+                except Exception as e:
+                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    logger.warning(str(exc_type) + str(fname) + 'line_number:' + str(exc_tb.tb_lineno))
+                    logger.warning('parsing time exception: ' +  str(e))
+            else:
+                logger.warning('time_delta is None! time_delta_number_final:{}'.format(time_delta_number_final))
             
         ################################################################################
         # gather the data needed for the interpretation
