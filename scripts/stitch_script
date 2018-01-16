@@ -1,0 +1,188 @@
+#!/bin/bash
+
+# 45
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_45/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 45 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_45 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_45.log
+
+
+# 46
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_46/Reel\ 46\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 46 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_46.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_46.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_46/Reel\ 46\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 46 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_46.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_46.p2.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_46/Reel\ 46\ Part\ 3/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 46 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_46.p3 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_46.p3.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_46/Reel\ 46\ Part\ 4/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 46 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_46.p4 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_46.p4.log
+
+# 47
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_47/Reel\ 47\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 47 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_47.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_47.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_47/Reel\ 47\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 47 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_47.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_47.p2.log
+# 48
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_48/Reel\ 48\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 48 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_48.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_48.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_48/Reel\ 48\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 48 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_48.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_48.p2.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_48/Reel\ 48\ Part\ 3/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 48 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_48.p3 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_48.p3.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_48/Reel\ 48\ Part\ 4/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 48 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_48.p4 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_48.p4.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_48/Reel\ 48\ Part\ 5/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 48 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_48.p5 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_48.p5.log
+
+# 49
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_49/Reel\ 49\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 49 \
+                                                         --reel 49 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_49.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_49.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_49/Reel\ 49\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 49 \
+                                                         --reel 49 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_49.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_49.p2.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_49/Reel\ 49\ Part\ 3/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 49 \
+                                                         --reel 49 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_49.p3 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_49.p3.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_49/Reel\ 49\ Part\ 4/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 49 \
+                                                         --reel 49 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_49.p4 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_49.p4.log
+
+# 50
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_50/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 50 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_50 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_50.log
+
+# 51
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_51/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 51 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_51 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_51.log
+
+# 52
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_52/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 52 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_52 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_52.log
+
+# 53
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_53/Reel\ 53\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 53 \
+                                                         --reel 53 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_53.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_53.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_53/Reel\ 53\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 53 \
+                                                         --reel 53 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_53.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_53.p2.log
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_53/Reel\ 53\ Part\ 3/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 53 \
+                                                         --reel 53 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_53.p3 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_53.p3.log
+
+# 54
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_54/Reel\ 54\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 54 \
+                                                         --reel 54 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_54.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_54.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_54/Reel\ 54\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 54 \
+                                                         --reel 54 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_54.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_54.p2.log
+
+# 55
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_55/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 55 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_55 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_55.log
+
+# 56
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_56/Reel\ 56\ Part\ 1/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 56 \
+                                                         --reel 56 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_56.p1 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_56.p1.log
+
+
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_56/Reel\ 56\ Part\ 2/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 56 \
+                                                         --reel 56 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_56.p2 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_56.p2.log
+# 57
+cd /mnt/cold/jemmons/geophysics/35mm/Reel_57/TIFF\ \(2400x1800\)/
+/home/jemmons/projects/antarctica/scripts/stitch_film.py --parallel 48 \
+                                                         --reel 57 \
+                                                         --output_dir /mnt/data/jemmons/geophysics/stitched/reel_57 \
+                                                         *.tif &> /mnt/data/jemmons/geophysics/stitched/reel_57.log
